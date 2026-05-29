@@ -412,7 +412,7 @@ class CandidateRetriever:
                 "first_name_score": best_string_similarity(query.first_name, [candidate.get("First_Name")]),
                 "last_name_score": max(
                         best_string_similarity(query.last_name, [candidate.get("Last_Name_At_Birth")]),
-                        0.75 * best_string_similarity(query.last_name, [candidate.get("Last_Name_Current")]),
+                        0.5 * best_string_similarity(query.last_name, [candidate.get("Last_Name_Current")]),
                 ),
                 "birth_year_score": year_similarity(query.birth_year, candidate.get("Birth_Year")),
                 "birth_location_score": best_location_similarity(query.birth_location, candidate.get("Birth_Location")),
