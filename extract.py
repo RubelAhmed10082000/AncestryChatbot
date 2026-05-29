@@ -357,14 +357,27 @@ def main() -> None:
         profiles = flatten_api_profiles(ancestor_response)
 
         # Also include the selected seed profile if available
-        profiles.append(selected)
+        if selected.get("Id") or selected.get("FirstName") or selected.get("BirthDate"):
+            profiles.append(selected)
 
         for profile in profiles:
             wikitree_id = profile.get("Name")
             if not wikitree_id:
                 continue
 
-            all_people_by_wikitree_id[wikitree_id] = normalise_person(profile)
+            new_person = normalise_person(profile)
+
+            existing_person = all_people_by_wikitree_id.get(wikitree_id)
+
+            if existing_person is None:
+                all_people_by_wikitree_id[wikitree_id] = new_person
+            else:
+                existing_filled_fields = sum(value is not None and value != "" for value in existing_person.values())
+                new_filled_fields = sum(value is not None and value != "" for value in new_person.values())
+
+                if new_filled_fields > existing_filled_fields:
+                    all_people_by_wikitree_id[wikitree_id] = new_person
+
             all_relationships.extend(extract_relationships(profile))
 
         time.sleep(REQUEST_DELAY_SECONDS)
