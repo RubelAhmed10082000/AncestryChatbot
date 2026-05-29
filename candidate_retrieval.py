@@ -156,7 +156,7 @@ def best_location_similarity(query_location: Any, candidate_location: Any) -> fl
     return max(char_score, token_score)
 
 
-def year_similarity(query_year: int | None, candidate_year: Any, max_difference: int = 10) -> float:
+def year_similarity(query_year: int | None, candidate_year: Any, max_difference: int = 20) -> float:
     """
     Score birth year closeness.
 
@@ -264,8 +264,8 @@ class CandidateRetriever:
 
     DEFAULT_WEIGHTS = {
         "first_name_score": 0.25,
-        "last_name_score": 0.35,
-        "birth_year_score": 0.20,
+        "last_name_score": 0.25,
+        "birth_year_score": 0.35,
         "birth_location_score": 0.15,
         "gender_score": 0.05,
     }
@@ -410,9 +410,9 @@ class CandidateRetriever:
         for _, candidate in self.index_df.iterrows():
             component_scores = {
                 "first_name_score": best_string_similarity(query.first_name, [candidate.get("First_Name")]),
-                "last_name_score": best_string_similarity(
-                    query.last_name,
-                    [candidate.get("Last_Name_At_Birth"), candidate.get("Last_Name_Current")],
+                "last_name_score": max(
+                        best_string_similarity(query.last_name, [candidate.get("Last_Name_At_Birth")]),
+                        0.75 * best_string_similarity(query.last_name, [candidate.get("Last_Name_Current")]),
                 ),
                 "birth_year_score": year_similarity(query.birth_year, candidate.get("Birth_Year")),
                 "birth_location_score": best_location_similarity(query.birth_location, candidate.get("Birth_Location")),
