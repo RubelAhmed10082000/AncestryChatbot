@@ -50,7 +50,7 @@ import pandas as pd
 DEFAULT_SCHEMA_DIR = Path("data/wikitree_schema")
 DEFAULT_SEED_PROFILES_PATH = Path("data/wikitree_test/seed_profiles.csv")
 DEFAULT_OUTPUT_DIR = Path("data/family_trees")
-DEFAULT_TREE_MODULE_PATH = Path("generate_family_tree.py")
+DEFAULT_TREE_MODULE_PATH = Path("app/tree/generate_family_tree.py")
 
 
 SEED_FIGURES: list[dict[str, str | None]] = [
