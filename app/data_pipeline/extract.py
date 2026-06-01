@@ -164,7 +164,6 @@ def flatten_api_profiles(api_response):
                     for ancestor in item["ancestors"]:
                         add_profile(ancestor)
 
-                # Some responses may directly contain numeric/profile-like keys
                 add_profile(item)
 
     elif isinstance(api_response, dict):

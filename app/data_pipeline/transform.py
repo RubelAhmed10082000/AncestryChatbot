@@ -1,44 +1,10 @@
-"""
-Transform extracted WikiTree sample data into the project's relational schema V0.1.
-
-Inputs expected from extract.py:
-    data/wikitree_test/people.csv
-    data/wikitree_test/relationships.csv
-
-Outputs:
-    data/wikitree_schema/person.csv
-    data/wikitree_schema/names.csv
-    data/wikitree_schema/event.csv
-    data/wikitree_schema/id_crosswalk.csv
-    data/wikitree_schema/relationship_rejections.csv
-    data/wikitree_schema/transform_quality_report.csv
-
-Run from your project root:
-    python transform_wikitree_to_schema.py
-
-Notes:
-    - Your V0.1 schema names the Event primary key as Marriage_ID. This script keeps that
-      column name for schema compatibility, but uses it as a generic event UUID for birth,
-      death, father_of, and mother_of events.
-    - Person_ID and Name_ID are generated as deterministic UUIDv5 values so rerunning the
-      script produces stable IDs.
-    - Wikitree_ID is preserved as the external source identifier.
-"""
-
-from __future__ import annotations
 
 import json
 import re
 import uuid
 from pathlib import Path
-from typing import Any
-
 import pandas as pd
 
-
-# -----------------------------------------------------------------------------
-# Paths
-# -----------------------------------------------------------------------------
 
 INPUT_DIR = Path("data/wikitree_test")
 OUTPUT_DIR = Path("data/wikitree_schema")
@@ -55,7 +21,6 @@ QUALITY_REPORT_OUTPUT = OUTPUT_DIR / "transform_quality_report.csv"
 
 WIKITREE_PROFILE_BASE_URL = "https://www.wikitree.com/wiki/"
 
-# A fixed namespace makes generated UUIDs stable across reruns.
 PROJECT_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_URL, "from-conversation-to-family-trees/wikitree-schema-v0.1")
 
 UNKNOWN_VALUES = {
@@ -77,13 +42,7 @@ UNKNOWN_VALUES = {
 }
 
 
-# -----------------------------------------------------------------------------
-# Generic cleaning helpers
-# -----------------------------------------------------------------------------
-
-
-def clean_text(value: Any) -> str | None:
-    """Return a stripped string or None for empty/unknown-like values."""
+def clean_text(value):
     if pd.isna(value):
         return None
 
@@ -96,8 +55,7 @@ def clean_text(value: Any) -> str | None:
 
 
 
-def clean_id(value: Any) -> str | None:
-    """Clean numeric/string IDs loaded from CSV, including 123.0-style values."""
+def clean_id(value):
     text = clean_text(value)
     if text is None:
         return None
@@ -109,8 +67,7 @@ def clean_id(value: Any) -> str | None:
 
 
 
-def normalise_gender(value: Any) -> str | None:
-    """Normalise WikiTree gender values into a small enum-like set."""
+def normalise_gender(value):
     text = clean_text(value)
     if text is None:
         return None
@@ -124,21 +81,11 @@ def normalise_gender(value: Any) -> str | None:
 
 
 
-def parse_date_parts(value: Any) -> tuple[str | None, int | None, int | None, int | None]:
-    """
-    Parse WikiTree-style dates into raw date, year, month, day.
-
-    Handles examples such as:
-        1835-11-30
-        1773-00-00
-        1858-05-00
-        0000-00-00
-    """
+def parse_date_parts(value):
     raw = clean_text(value)
     if raw is None:
         return None, None, None, None
 
-    # Extract first plausible year.
     year_match = re.search(r"(\d{3,4})", raw)
     year = int(year_match.group(1)) if year_match else None
 
@@ -160,8 +107,7 @@ def parse_date_parts(value: Any) -> tuple[str | None, int | None, int | None, in
 
 
 
-def clean_location(value: Any) -> str | None:
-    """Clean location strings while preserving meaningful detail."""
+def clean_location(value):
     text = clean_text(value)
     if text is None:
         return None
@@ -173,8 +119,7 @@ def clean_location(value: Any) -> str | None:
 
 
 
-def parse_data_status(value: Any) -> dict[str, Any]:
-    """Parse the JSON-ish data_status column produced by extract.py."""
+def parse_data_status(value):
     text = clean_text(value)
     if text is None:
         return {}
@@ -187,8 +132,7 @@ def parse_data_status(value: Any) -> dict[str, Any]:
 
 
 
-def status_for_field(row: pd.Series, field_name: str) -> str | None:
-    """Get WikiTree DataStatus value for a given field, if available."""
+def status_for_field(row, field_name):
     status = row.get("_parsed_data_status")
     if isinstance(status, dict):
         value = status.get(field_name)
@@ -197,32 +141,24 @@ def status_for_field(row: pd.Series, field_name: str) -> str | None:
 
 
 
-def stable_uuid(entity_type: str, natural_key: str) -> str:
-    """Generate stable UUIDv5 IDs from deterministic natural keys."""
+def stable_uuid(entity_type, natural_key):
     return str(uuid.uuid5(PROJECT_NAMESPACE, f"{entity_type}:{natural_key}"))
 
 
 
-def profile_url(wikitree_id: str | None) -> str | None:
+def profile_url(wikitree_id):
     if not wikitree_id:
         return None
     return f"{WIKITREE_PROFILE_BASE_URL}{wikitree_id}"
 
 
 
-def read_csv_required(path: Path) -> pd.DataFrame:
+def read_csv_required(path):
     if not path.exists():
         raise FileNotFoundError(f"Missing required input file: {path}")
     return pd.read_csv(path, dtype=str, keep_default_na=False)
 
-
-# -----------------------------------------------------------------------------
-# Input preparation
-# -----------------------------------------------------------------------------
-
-
-def prepare_people(raw_people: pd.DataFrame) -> pd.DataFrame:
-    """Clean the extracted people.csv into a stable intermediate dataframe."""
+def prepare_people(raw_people):
     df = raw_people.copy()
 
     expected_columns = [
@@ -270,14 +206,11 @@ def prepare_people(raw_people: pd.DataFrame) -> pd.DataFrame:
     df["death_location"] = df["death_location"].apply(clean_location)
     df["_parsed_data_status"] = df["data_status"].apply(parse_data_status)
 
-    # Drop rows that cannot be identified.
     df = df[df["person_id"].notna() & df["wikitree_id"].notna()].copy()
 
-    # Deduplicate by WikiTree numeric ID first, then WikiTree page ID.
     df = df.drop_duplicates(subset=["person_id"], keep="first")
     df = df.drop_duplicates(subset=["wikitree_id"], keep="first")
 
-    # Stable schema UUIDs.
     df["schema_person_id"] = df["wikitree_id"].apply(lambda key: stable_uuid("person", key))
     df["schema_name_id"] = df["wikitree_id"].apply(lambda key: stable_uuid("name", key))
 
@@ -303,11 +236,6 @@ def prepare_relationships(raw_relationships: pd.DataFrame) -> pd.DataFrame:
     df = df.drop_duplicates(subset=["parent_id", "child_id", "relationship_type"], keep="first")
 
     return df.reset_index(drop=True)
-
-
-# -----------------------------------------------------------------------------
-# Schema table builders
-# -----------------------------------------------------------------------------
 
 
 def build_person_table(people: pd.DataFrame, relationships: pd.DataFrame) -> pd.DataFrame:
@@ -381,17 +309,17 @@ def build_names_table(people: pd.DataFrame) -> pd.DataFrame:
 
 def event_row(
     *,
-    event_key: str,
-    person_id_1: str,
-    person_id_2: str | None,
-    event_type: str,
-    raw_date: str | None = None,
-    month: int | None = None,
-    day: int | None = None,
-    year: int | None = None,
-    location: str | None = None,
-    data_status: str | None = None,
-) -> dict[str, Any]:
+    event_key,
+    person_id_1,
+    person_id_2,
+    event_type,
+    raw_date,
+    month,
+    day,
+    year,
+    location,
+    data_status,
+):
     """Create one event row using the V0.1 Event column names."""
     return {
         "Marriage_ID": stable_uuid("event", event_key),
@@ -408,20 +336,19 @@ def event_row(
 
 
 
-def build_event_table(people: pd.DataFrame, relationships: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+def build_event_table(people, relationships):
     """
     Build Event table from birth, death, and parent-child relationships.
 
     Returns:
         event_df, relationship_rejections_df
     """
-    events: list[dict[str, Any]] = []
-    rejections: list[dict[str, Any]] = []
+    events = []
+    rejections = []
 
     source_id_to_schema_id = dict(zip(people["person_id"], people["schema_person_id"]))
     source_id_to_wikitree_id = dict(zip(people["person_id"], people["wikitree_id"]))
 
-    # Birth/death events.
     for _, row in people.iterrows():
         schema_person_id = row["schema_person_id"]
         wikitree_id = row["wikitree_id"]
@@ -460,7 +387,6 @@ def build_event_table(people: pd.DataFrame, relationships: pd.DataFrame) -> tupl
                 )
             )
 
-    # Parent-child relationship events.
     for _, rel in relationships.iterrows():
         parent_source_id = rel.get("parent_id")
         child_source_id = rel.get("child_id")
@@ -583,13 +509,7 @@ def build_quality_report(
 
     return pd.DataFrame(metrics, columns=["metric", "value"])
 
-
-# -----------------------------------------------------------------------------
-# Main
-# -----------------------------------------------------------------------------
-
-
-def main() -> None:
+def main():
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     raw_people = read_csv_required(PEOPLE_INPUT)
