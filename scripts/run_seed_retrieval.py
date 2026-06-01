@@ -49,7 +49,7 @@ import pandas as pd
 DEFAULT_SCHEMA_DIR = Path("data/wikitree_schema")
 DEFAULT_SEED_PROFILES_PATH = Path("data/wikitree_test/seed_profiles.csv")
 DEFAULT_OUTPUT_DIR = Path("data/evaluation")
-DEFAULT_CANDIDATE_MODULE_PATH = Path("candidate_retrieval.py")
+DEFAULT_CANDIDATE_MODULE_PATH = Path("app/retrieval/candidate_retrieval.py")
 
 
 SEED_FIGURES: list[dict[str, str | None]] = [
