@@ -1,4 +1,15 @@
-.venv
 .vscode
 data
-__pycache__
+.venv/
+__pycache__/
+*.pyc
+.env
+.vscode/
+.ipynb_checkpoints/
+
+data/raw/
+data/family_trees/
+data/evaluation/
+
+*.log
+.DS_Store
