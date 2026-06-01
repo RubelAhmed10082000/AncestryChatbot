@@ -1,24 +1,3 @@
-"""
-Candidate retrieval over the transformed WikiTree schema dataset.
-
-Inputs expected from transform_wikitree_to_schema.py:
-    data/wikitree_schema/person.csv
-    data/wikitree_schema/names.csv
-    data/wikitree_schema/event.csv
-
-Main use:
-    python candidate_retrieval.py --first-name Jane --last-name Austen --birth-year 1775 --birth-location Hampshire --top-k 5
-
-Optional output:
-    python candidate_retrieval.py --first-name Charles --last-name Darwin --birth-year 1809 --birth-location Shrewsbury --output data/results/darwin_candidates.csv
-
-Notes:
-    - This is a deterministic baseline retrieval/ranking algorithm.
-    - It scores candidates using name similarity, birth year proximity, birth location similarity, and optional gender match.
-    - It is deliberately simple and explainable, which makes it suitable as a dissertation baseline before adding embeddings/RAG.
-"""
-
-from __future__ import annotations
 
 import argparse
 import math
@@ -26,14 +5,8 @@ import re
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 from pathlib import Path
-from typing import Any
-
 import pandas as pd
 
-
-# -----------------------------------------------------------------------------
-# Paths
-# -----------------------------------------------------------------------------
 
 DEFAULT_SCHEMA_DIR = Path("data/wikitree_schema")
 PERSON_FILE = "person.csv"
@@ -41,14 +14,8 @@ NAMES_FILE = "names.csv"
 EVENT_FILE = "event.csv"
 
 
-# -----------------------------------------------------------------------------
-# Data structures
-# -----------------------------------------------------------------------------
-
-
 @dataclass(frozen=True)
 class QueryProfile:
-    """Structured query profile extracted from a user conversation."""
 
     first_name: str | None = None
     last_name: str | None = None
@@ -56,16 +23,10 @@ class QueryProfile:
     birth_location: str | None = None
     gender: str | None = None
 
-
-# -----------------------------------------------------------------------------
-# Cleaning and scoring helpers
-# -----------------------------------------------------------------------------
-
 UNKNOWN_VALUES = {"", " ", "nan", "NaN", "None", "none", "NULL", "null", "Unknown", "unknown", "UNKNOWN"}
 
 
-def clean_text(value: Any) -> str | None:
-    """Return a cleaned string or None."""
+def clean_text(value):
     if value is None:
         return None
 
@@ -83,8 +44,7 @@ def clean_text(value: Any) -> str | None:
     return text or None
 
 
-def normalise_for_matching(value: Any) -> str:
-    """Lowercase, punctuation-light normalisation for fuzzy matching."""
+def normalise_for_matching(value):
     text = clean_text(value)
     if text is None:
         return ""
@@ -95,16 +55,14 @@ def normalise_for_matching(value: Any) -> str:
     return text
 
 
-def token_set(value: Any) -> set[str]:
-    """Tokenise a string into a set of useful matching tokens."""
+def token_set(value):
     text = normalise_for_matching(value)
     if not text:
         return set()
     return {token for token in text.split() if token}
 
 
-def sequence_similarity(left: Any, right: Any) -> float:
-    """Return 0-1 fuzzy string similarity."""
+def sequence_similarity(left, right):
     left_norm = normalise_for_matching(left)
     right_norm = normalise_for_matching(right)
 
@@ -114,8 +72,7 @@ def sequence_similarity(left: Any, right: Any) -> float:
     return SequenceMatcher(None, left_norm, right_norm).ratio()
 
 
-def token_overlap_similarity(left: Any, right: Any) -> float:
-    """Return 0-1 token overlap score using Jaccard similarity."""
+def token_overlap_similarity(left, right):
     left_tokens = token_set(left)
     right_tokens = token_set(right)
 
@@ -125,8 +82,7 @@ def token_overlap_similarity(left: Any, right: Any) -> float:
     return len(left_tokens & right_tokens) / len(left_tokens | right_tokens)
 
 
-def best_string_similarity(query_value: Any, candidate_values: list[Any]) -> float:
-    """Best similarity between one query value and multiple candidate values."""
+def best_string_similarity(query_value, candidate_values):
     query_text = clean_text(query_value)
     if query_text is None:
         return math.nan
@@ -135,14 +91,7 @@ def best_string_similarity(query_value: Any, candidate_values: list[Any]) -> flo
     return max(scores) if scores else 0.0
 
 
-def best_location_similarity(query_location: Any, candidate_location: Any) -> float:
-    """
-    Location similarity combines character similarity and token overlap.
-
-    This helps cases like:
-        query: Hampshire
-        candidate: Steventon, Hampshire, England
-    """
+def best_location_similarity(query_location, candidate_location):
     if clean_text(query_location) is None:
         return math.nan
 
@@ -152,19 +101,10 @@ def best_location_similarity(query_location: Any, candidate_location: Any) -> fl
     char_score = sequence_similarity(query_location, candidate_location)
     token_score = token_overlap_similarity(query_location, candidate_location)
 
-    # Token overlap is more useful for place names embedded in long location strings.
     return max(char_score, token_score)
 
 
-def year_similarity(query_year: int | None, candidate_year: Any, max_difference: int = 20) -> float:
-    """
-    Score birth year closeness.
-
-    Exact year = 1.0.
-    Difference >= max_difference = 0.0.
-    Missing candidate year = 0.0 if the query supplied a year.
-    Missing query year = NaN so the weight can be ignored.
-    """
+def year_similarity(query_year, candidate_year, max_difference = 20):
     if query_year is None:
         return math.nan
 
@@ -186,8 +126,7 @@ def year_similarity(query_year: int | None, candidate_year: Any, max_difference:
     return 1.0 - (diff / max_difference)
 
 
-def gender_similarity(query_gender: str | None, candidate_gender: Any) -> float:
-    """Return 1 for gender match, 0 for mismatch, NaN when query did not supply gender."""
+def gender_similarity(query_gender, candidate_gender):
     query = clean_text(query_gender)
     if query is None:
         return math.nan
@@ -199,13 +138,7 @@ def gender_similarity(query_gender: str | None, candidate_gender: Any) -> float:
     return 1.0 if query.lower()[0] == candidate.lower()[0] else 0.0
 
 
-def weighted_score(component_scores: dict[str, float], weights: dict[str, float]) -> float:
-    """
-    Compute a 0-100 weighted score.
-
-    Missing query fields produce NaN component scores and are excluded from the denominator.
-    This prevents a user being punished for not knowing a field.
-    """
+def weighted_score(component_scores, weights):
     numerator = 0.0
     denominator = 0.0
 
@@ -223,8 +156,7 @@ def weighted_score(component_scores: dict[str, float], weights: dict[str, float]
     return round((numerator / denominator) * 100, 2)
 
 
-def explain_matches(component_scores: dict[str, float]) -> str:
-    """Create a concise explanation of which features matched strongly."""
+def explain_matches(component_scores):
     labels = {
         "first_name_score": "first name",
         "last_name_score": "last name",
@@ -254,13 +186,8 @@ def explain_matches(component_scores: dict[str, float]) -> str:
     return "No strong field-level match."
 
 
-# -----------------------------------------------------------------------------
-# Retrieval class
-# -----------------------------------------------------------------------------
-
 
 class CandidateRetriever:
-    """Load schema CSVs and retrieve ranked candidate people."""
 
     DEFAULT_WEIGHTS = {
         "first_name_score": 0.25,
@@ -270,7 +197,7 @@ class CandidateRetriever:
         "gender_score": 0.05,
     }
 
-    def __init__(self, schema_dir: Path = DEFAULT_SCHEMA_DIR, weights: dict[str, float] | None = None) -> None:
+    def __init__(self, schema_dir: Path = DEFAULT_SCHEMA_DIR, weights: dict[str, float] | None = None):
         self.schema_dir = Path(schema_dir)
         self.weights = weights or self.DEFAULT_WEIGHTS
 
@@ -279,7 +206,7 @@ class CandidateRetriever:
         self.event_df = self._read_required_csv(EVENT_FILE)
         self.index_df = self._build_search_index()
 
-    def _read_required_csv(self, filename: str) -> pd.DataFrame:
+    def _read_required_csv(self, filename):
         path = self.schema_dir / filename
         if not path.exists():
             raise FileNotFoundError(
@@ -287,13 +214,11 @@ class CandidateRetriever:
             )
         return pd.read_csv(path, dtype=str, keep_default_na=False)
 
-    def _build_search_index(self) -> pd.DataFrame:
-        """Join person/name rows and attach birth/death events."""
+    def _build_search_index(self):
         people = self.person_df.copy()
         names = self.names_df.copy()
         events = self.event_df.copy()
 
-        # Make expected columns safe.
         for col in ["Person_ID", "Wikitree_ID", "Gender", "Profile_URL", "Has_Children"]:
             if col not in people.columns:
                 people[col] = None
@@ -376,7 +301,7 @@ class CandidateRetriever:
         return people
 
     @staticmethod
-    def _build_full_name(row: pd.Series) -> str | None:
+    def _build_full_name(row):
         parts = [
             clean_text(row.get("First_Name")),
             clean_text(row.get("Middle_Name")),
@@ -388,15 +313,14 @@ class CandidateRetriever:
     def find_candidates(
         self,
         *,
-        first_name: str | None = None,
-        last_name: str | None = None,
-        birth_year: int | None = None,
-        birth_location: str | None = None,
-        gender: str | None = None,
-        top_k: int = 5,
-        min_score: float = 0.0,
+        first_name,
+        last_name,
+        birth_year,
+        birth_location,
+        gender,
+        top_k = 5,
+        min_score = 0.0,
     ) -> pd.DataFrame:
-        """Return top-k ranked candidates for a partial genealogical profile."""
         query = QueryProfile(
             first_name=first_name,
             last_name=last_name,
@@ -405,7 +329,7 @@ class CandidateRetriever:
             gender=gender,
         )
 
-        records: list[dict[str, Any]] = []
+        records = []
 
         for _, candidate in self.index_df.iterrows():
             component_scores = {
@@ -473,12 +397,10 @@ class CandidateRetriever:
         return result.head(top_k)
 
 
-# -----------------------------------------------------------------------------
-# CLI
-# -----------------------------------------------------------------------------
 
 
-def parse_args() -> argparse.Namespace:
+
+def parse_args():
     parser = argparse.ArgumentParser(description="Retrieve ranked genealogy candidates from transformed WikiTree schema CSVs.")
 
     parser.add_argument("--schema-dir", type=Path, default=DEFAULT_SCHEMA_DIR, help="Directory containing person.csv, names.csv, and event.csv.")
@@ -494,7 +416,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main() -> None:
+def main():
     args = parse_args()
 
     retriever = CandidateRetriever(schema_dir=args.schema_dir)
