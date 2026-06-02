@@ -510,7 +510,3 @@ def main():
 
     save_outputs(person_table, names_table, event_table, id_crosswalk, rejections, quality_report)
     print_summary(person_table, names_table, event_table, rejections, quality_report)
-
-
-if __name__ == "__main__":
-    main()
