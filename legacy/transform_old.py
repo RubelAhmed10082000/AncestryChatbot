@@ -1,4 +1,4 @@
-
+""""
 import json
 import re
 import uuid
@@ -219,7 +219,7 @@ def prepare_people(raw_people):
 
 
 def prepare_relationships(raw_relationships: pd.DataFrame) -> pd.DataFrame:
-    """Clean raw relationship rows from extract.py."""
+
     df = raw_relationships.copy()
 
     expected_columns = ["parent_id", "child_id", "child_wikitree_id", "relationship_type"]
@@ -239,7 +239,6 @@ def prepare_relationships(raw_relationships: pd.DataFrame) -> pd.DataFrame:
 
 
 def build_person_table(people: pd.DataFrame, relationships: pd.DataFrame) -> pd.DataFrame:
-    """Build Person table matching the uploaded V0.1 schema."""
     parent_ids_with_children = set(relationships["parent_id"].dropna())
 
     records = []
@@ -265,7 +264,6 @@ def build_person_table(people: pd.DataFrame, relationships: pd.DataFrame) -> pd.
 
 
 def build_names_table(people: pd.DataFrame) -> pd.DataFrame:
-    """Build Names table matching the uploaded V0.1 schema."""
     records = []
 
     for _, row in people.iterrows():
@@ -320,7 +318,6 @@ def event_row(
     location,
     data_status,
 ):
-    """Create one event row using the V0.1 Event column names."""
     return {
         "Marriage_ID": stable_uuid("event", event_key),
         "Person_ID_1": person_id_1,
@@ -337,12 +334,12 @@ def event_row(
 
 
 def build_event_table(people, relationships):
-    """
+
     Build Event table from birth, death, and parent-child relationships.
 
     Returns:
         event_df, relationship_rejections_df
-    """
+
     events = []
     rejections = []
 
@@ -452,7 +449,6 @@ def build_event_table(people, relationships):
 
 
 def build_id_crosswalk(people: pd.DataFrame) -> pd.DataFrame:
-    """Build source-to-schema ID mapping for debugging and database loading."""
     return people[
         [
             "person_id",
@@ -486,7 +482,6 @@ def build_quality_report(
     event_table: pd.DataFrame,
     rejections: pd.DataFrame,
 ) -> pd.DataFrame:
-    """Summarise transformation results."""
     event_counts = event_table["Event_Type"].value_counts(dropna=False).to_dict()
 
     metrics = [
@@ -550,6 +545,5 @@ def main():
     print(f"Quality report: {QUALITY_REPORT_OUTPUT}")
     print("\nQuality report:")
     print(quality_report.to_string(index=False))
-
-
+"""
 
