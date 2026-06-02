@@ -1,51 +1,63 @@
-from __future__ import annotations
-
 import argparse
 import importlib.util
-import math
 import sys
 from pathlib import Path
-from typing import Any
 
 import pandas as pd
 
 
 DEFAULT_SCHEMA_DIR = Path("data/wikitree_schema")
-DEFAULT_CANDIDATE_MODULE_PATH = Path("retrieval/candidate_retrieval.py")
+DEFAULT_CANDIDATE_MODULE_PATH = Path("app/retrieval/candidate_retrieval.py")
 
+
+SCORE_COLUMNS = [
+    "first_name_score",
+    "last_name_score",
+    "birth_year_score",
+    "birth_location_score",
+    "gender_score",
+]
+
+
+FRONT_COLUMNS = [
+    "rank",
+    "rank_score",
+    "confidence_score",
+    "confidence_band",
+    "wikitree_id",
+    "full_name",
+    "birth_year",
+    "birth_location",
+    "confidence_explanation",
+    "confidence_interpretation",
+]
 
 
 def safe_float(value):
     if value is None:
         return None
+
     try:
         if pd.isna(value):
             return None
     except TypeError:
         pass
+
     try:
         return float(value)
     except (TypeError, ValueError):
         return None
 
 
-
 def evidence_coverage(row):
-    evidence_fields = [
-        "first_name_score",
-        "last_name_score",
-        "birth_year_score",
-        "birth_location_score",
-        "gender_score",
-    ]
-
     available = 0
     strong = 0
 
-    for field in evidence_fields:
-        value = safe_float(row.get(field))
+    for col in SCORE_COLUMNS:
+        value = safe_float(row.get(col))
         if value is None:
             continue
+
         available += 1
         if value >= 0.8:
             strong += 1
@@ -56,8 +68,7 @@ def evidence_coverage(row):
     return strong / available
 
 
-
-def temporal_quality(row):
+def birth_date_quality(row):
     score = safe_float(row.get("birth_year_score"))
 
     if score is None:
@@ -68,8 +79,8 @@ def temporal_quality(row):
         return "close birth-year match"
     if score > 0:
         return "weak birth-year match"
-    return "birth year missing or mismatch"
 
+    return "birth year missing or mismatch"
 
 
 def name_quality(row):
@@ -84,12 +95,13 @@ def name_quality(row):
         return "moderate name match"
     if first >= 0.6 or last >= 0.6:
         return "partial name match"
-    return "weak name match"
 
+    return "weak name match"
 
 
 def ambiguity_penalty(row, candidates):
     rank = safe_float(row.get("rank"))
+
     if rank != 1 or len(candidates) < 2:
         return 0.0
 
@@ -103,15 +115,14 @@ def ambiguity_penalty(row, candidates):
         return 5.0
     if margin >= 5:
         return 10.0
+
     return 15.0
 
 
-
 def calculate_confidence_score(row, candidates):
-    base_score = safe_float(row.get("rank_score")) or 0.0
-    confidence = base_score
-
+    confidence = safe_float(row.get("rank_score")) or 0.0
     coverage = evidence_coverage(row)
+
     if coverage >= 0.8:
         confidence += 5
     elif coverage <= 0.3:
@@ -123,6 +134,7 @@ def calculate_confidence_score(row, candidates):
 
     if first_name_score is not None and first_name_score < 0.6:
         confidence -= 15
+
     if last_name_score is not None and last_name_score < 0.6:
         confidence -= 15
 
@@ -133,20 +145,22 @@ def calculate_confidence_score(row, candidates):
             confidence += 5
 
     confidence -= ambiguity_penalty(row, candidates)
+    confidence = max(0.0, min(100.0, confidence))
 
-    return round(max(0.0, min(100.0, confidence)), 2)
-
+    return round(confidence, 2)
 
 
 def confidence_band(confidence_score):
-    if confidence_score >= 90:
-        return "High"
-    if confidence_score >= 70:
-        return "Moderate"
-    if confidence_score >= 50:
-        return "Low"
-    return "Very low"
+    score = safe_float(confidence_score) or 0.0
 
+    if score >= 90:
+        return "High"
+    if score >= 70:
+        return "Moderate"
+    if score >= 50:
+        return "Low"
+
+    return "Very low"
 
 
 def confidence_interpretation(confidence_score):
@@ -158,16 +172,16 @@ def confidence_interpretation(confidence_score):
         return "Plausible candidate, but at least one important field is missing, weak, or ambiguous."
     if band == "Low":
         return "Weak candidate. Treat as exploratory unless supported by additional evidence."
+
     return "Very weak candidate. Likely not reliable without substantial extra evidence."
 
 
-
 def build_confidence_explanation(row):
-    parts = [name_quality(row), temporal_quality(row)]
+    parts = [name_quality(row), birth_date_quality(row)]
 
     location_score = safe_float(row.get("birth_location_score"))
     if location_score is not None:
-        if location_score >= 0.8:
+        if location_score >= 0.5:
             parts.append("strong birth-location match")
         elif location_score > 0:
             parts.append("partial birth-location match")
@@ -184,46 +198,46 @@ def build_confidence_explanation(row):
     return "; ".join(parts) + "."
 
 
-
 def add_confidence_scores(candidates):
     if candidates.empty:
         return candidates
 
     df = candidates.copy()
+    scores = []
 
-    confidence_scores = []
     for _, row in df.iterrows():
-        confidence_scores.append(calculate_confidence_score(row, df))
+        scores.append(calculate_confidence_score(row, df))
 
-    df["confidence_score"] = confidence_scores
+    df["confidence_score"] = scores
     df["confidence_band"] = df["confidence_score"].apply(confidence_band)
     df["confidence_interpretation"] = df["confidence_score"].apply(confidence_interpretation)
     df["confidence_explanation"] = df.apply(build_confidence_explanation, axis=1)
 
-    front_cols = [
-        "rank",
-        "rank_score",
-        "confidence_score",
-        "confidence_band",
-        "wikitree_id",
-        "full_name",
-        "birth_year",
-        "birth_location",
-        "confidence_explanation",
-        "confidence_interpretation",
-    ]
+    front_cols = []
+    for col in FRONT_COLUMNS:
+        if col in df.columns:
+            front_cols.append(col)
 
-    remaining_cols = [col for col in df.columns if col not in front_cols]
-    return df[front_cols + remaining_cols]
+    other_cols = []
+    for col in df.columns:
+        if col not in front_cols:
+            other_cols.append(col)
+
+    return df[front_cols + other_cols]
 
 
-def load_candidate_retriever(module_path: Path):
+def load_candidate_retriever(module_path):
+    module_path = Path(module_path)
+
+    if not module_path.exists() and module_path == DEFAULT_CANDIDATE_MODULE_PATH:
+        old_layout_path = Path("candidate_retrieval.py")
+        if old_layout_path.exists():
+            module_path = old_layout_path
+
     module_path = module_path.resolve()
+
     if not module_path.exists():
-        raise FileNotFoundError(
-            f"Could not find {module_path}. Put confidence_scoring.py next to candidate_retrieval.py "
-            "or pass --candidate-module-path."
-        )
+        raise FileNotFoundError(f"Could not find {module_path}")
 
     spec = importlib.util.spec_from_file_location("candidate_retrieval", module_path)
     if spec is None or spec.loader is None:
@@ -254,7 +268,6 @@ def parse_args():
     parser.add_argument("--output", type=Path, default=None)
 
     return parser.parse_args()
-
 
 
 def main():
@@ -290,6 +303,7 @@ def main():
         "birth_location",
         "confidence_explanation",
     ]
+    display_cols = [col for col in display_cols if col in results.columns]
 
     print(results[display_cols].to_string(index=False))
 
