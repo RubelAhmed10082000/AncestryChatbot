@@ -1,20 +1,19 @@
 import json
 import time
 from pathlib import Path
+
 import pandas as pd
 import requests
 
 
 BASE_URL = "https://api.wikitree.com/api.php"
 APP_ID = "AncestryChatbotMSc"
-
 OUTPUT_DIR = Path("data/wikitree_test")
 
 ANCESTOR_DEPTH = 3
 REQUEST_DELAY_SECONDS = 1.0
 
-
-TEST_FIGURES = [
+SEED_FIGURES = [
     {
         "label": "Samuel Langhorne Clemens / Mark Twain",
         "first_name": "Samuel",
@@ -79,30 +78,26 @@ TEST_FIGURES = [
     },
 ]
 
-
-FIELDS = ",".join(
-    [
-        "Id",
-        "Name",
-        "FirstName",
-        "MiddleName",
-        "LastNameAtBirth",
-        "LastNameCurrent",
-        "BirthDate",
-        "BirthLocation",
-        "DeathDate",
-        "DeathLocation",
-        "Father",
-        "Mother",
-        "Gender",
-        "Privacy",
-        "DataStatus",
-    ]
-)
+FIELDS = ",".join([
+    "Id",
+    "Name",
+    "FirstName",
+    "MiddleName",
+    "LastNameAtBirth",
+    "LastNameCurrent",
+    "BirthDate",
+    "BirthLocation",
+    "DeathDate",
+    "DeathLocation",
+    "Father",
+    "Mother",
+    "Gender",
+    "Privacy",
+    "DataStatus",
+])
 
 
-def call_wikitree_api(params):
-
+def call_wikitree(params):
     params = dict(params)
     params["appId"] = APP_ID
 
@@ -123,64 +118,54 @@ def search_person(seed):
     if seed.get("birth_date"):
         params["BirthDate"] = seed["birth_date"]
 
-    return call_wikitree_api(params)
+    return call_wikitree(params)
 
 
-def get_ancestors(profile_key, depth: int = ANCESTOR_DEPTH):
-    """
-    Pull ancestors from one profile
-    """
-    return call_wikitree_api(
-        {
-            "action": "getAncestors",
-            "key": profile_key,
-            "depth": depth,
-            "fields": FIELDS,
-            "resolveRedirect": "1",
-        }
-    )
+def get_ancestors(profile_key, depth=ANCESTOR_DEPTH):
+    params = {
+        "action": "getAncestors",
+        "key": profile_key,
+        "depth": depth,
+        "fields": FIELDS,
+        "resolveRedirect": "1",
+    }
+    return call_wikitree(params)
 
 
 def flatten_api_profiles(api_response):
-
     profiles = []
 
-    def add_profile(obj):
-        if isinstance(obj, dict):
-            if "Id" in obj or "Name" in obj:
-                profiles.append(obj)
-
     if isinstance(api_response, list):
-        for item in api_response:
-            if isinstance(item, dict):
-                if "profile" in item:
-                    add_profile(item["profile"])
-
-                if "matches" in item and isinstance(item["matches"], list):
-                    for match in item["matches"]:
-                        add_profile(match)
-
-                if "ancestors" in item and isinstance(item["ancestors"], list):
-                    for ancestor in item["ancestors"]:
-                        add_profile(ancestor)
-
-                add_profile(item)
-
+        items = api_response
     elif isinstance(api_response, dict):
-        if "profile" in api_response:
-            add_profile(api_response["profile"])
+        items = [api_response]
+    else:
+        return profiles
 
-        if "matches" in api_response and isinstance(api_response["matches"], list):
-            for match in api_response["matches"]:
-                add_profile(match)
+    for item in items:
+        if not isinstance(item, dict):
+            continue
 
-        if "ancestors" in api_response and isinstance(api_response["ancestors"], list):
-            for ancestor in api_response["ancestors"]:
-                add_profile(ancestor)
+        if "profile" in item:
+            add_profile(profiles, item.get("profile"))
 
-        add_profile(api_response)
+        for key in ["matches", "ancestors"]:
+            values = item.get(key)
+            if isinstance(values, list):
+                for value in values:
+                    add_profile(profiles, value)
+
+        add_profile(profiles, item)
 
     return profiles
+
+
+def add_profile(profiles, value):
+    if not isinstance(value, dict):
+        return
+
+    if "Id" in value or "Name" in value:
+        profiles.append(value)
 
 
 def choose_best_search_match(seed, search_response):
@@ -192,12 +177,10 @@ def choose_best_search_match(seed, search_response):
         }
 
     matches = flatten_api_profiles(search_response)
-
     if not matches:
         return None
 
     birth_date = seed.get("birth_date")
-
     if birth_date:
         for match in matches:
             if match.get("BirthDate") == birth_date:
@@ -211,7 +194,10 @@ def choose_best_search_match(seed, search_response):
     return best
 
 
-def normalise_person(profile) :
+def normalise_person(profile):
+    data_status = None
+    if profile.get("DataStatus") is not None:
+        data_status = json.dumps(profile.get("DataStatus"), ensure_ascii=False)
 
     return {
         "person_id": profile.get("Id"),
@@ -228,14 +214,12 @@ def normalise_person(profile) :
         "father_id": profile.get("Father"),
         "mother_id": profile.get("Mother"),
         "privacy": profile.get("Privacy"),
-        "data_status": json.dumps(profile.get("DataStatus"), ensure_ascii=False)
-        if profile.get("DataStatus") is not None
-        else None,
+        "data_status": data_status,
     }
 
 
 def extract_relationships(profile):
-    relationships = []
+    rows = []
 
     child_id = profile.get("Id")
     child_wikitree_id = profile.get("Name")
@@ -244,119 +228,126 @@ def extract_relationships(profile):
     mother_id = profile.get("Mother")
 
     if father_id and child_id:
-        relationships.append(
-            {
-                "parent_id": father_id,
-                "child_id": child_id,
-                "child_wikitree_id": child_wikitree_id,
-                "relationship_type": "father_of",
-            }
-        )
+        rows.append({
+            "parent_id": father_id,
+            "child_id": child_id,
+            "child_wikitree_id": child_wikitree_id,
+            "relationship_type": "father_of",
+        })
 
     if mother_id and child_id:
-        relationships.append(
-            {
-                "parent_id": mother_id,
-                "child_id": child_id,
-                "child_wikitree_id": child_wikitree_id,
-                "relationship_type": "mother_of",
-            }
-        )
+        rows.append({
+            "parent_id": mother_id,
+            "child_id": child_id,
+            "child_wikitree_id": child_wikitree_id,
+            "relationship_type": "mother_of",
+        })
 
-    return relationships
+    return rows
+
+
+def save_json(path, data):
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+
+
+def save_outputs(raw_search_results, raw_ancestor_results, selected_seeds, people_by_wikitree_id, relationships):
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+    seed_df = pd.DataFrame(selected_seeds)
+    people_df = pd.DataFrame(people_by_wikitree_id.values())
+    relationship_df = pd.DataFrame(relationships)
+
+    if not relationship_df.empty:
+        relationship_df = relationship_df.drop_duplicates()
+
+    save_json(OUTPUT_DIR / "raw_search_results.json", raw_search_results)
+    save_json(OUTPUT_DIR / "raw_ancestor_results.json", raw_ancestor_results)
+
+    seed_df.to_csv(OUTPUT_DIR / "seed_profiles.csv", index=False)
+    people_df.to_csv(OUTPUT_DIR / "people.csv", index=False)
+    relationship_df.to_csv(OUTPUT_DIR / "relationships.csv", index=False)
+
+    return seed_df, people_df, relationship_df
+
+
+def process_seed(seed, raw_search_results, raw_ancestor_results, selected_seeds, people_by_wikitree_id, relationships):
+    label = seed["label"]
+    print(f"\nSearching seed: {label}")
+
+    search_response = search_person(seed)
+    raw_search_results[label] = search_response
+
+    selected = choose_best_search_match(seed, search_response)
+    if not selected:
+        print(f"  No match found for {label}")
+        return
+
+    profile_key = selected.get("Name")
+    if not profile_key:
+        print(f"  Match found but no WikiTree Name/key for {label}")
+        return
+
+    print(f"  Selected WikiTree profile: {profile_key}")
+    selected_seeds.append(make_seed_row(label, selected))
+
+    time.sleep(REQUEST_DELAY_SECONDS)
+
+    print(f"  Fetching ancestors depth={ANCESTOR_DEPTH}")
+    ancestor_response = get_ancestors(profile_key, depth=ANCESTOR_DEPTH)
+    raw_ancestor_results[profile_key] = ancestor_response
+
+    profiles = flatten_api_profiles(ancestor_response)
+    profiles.append(selected)
+
+    for profile in profiles:
+        wikitree_id = profile.get("Name")
+        if not wikitree_id:
+            continue
+
+        people_by_wikitree_id[wikitree_id] = normalise_person(profile)
+        relationships.extend(extract_relationships(profile))
+
+    time.sleep(REQUEST_DELAY_SECONDS)
+
+
+def make_seed_row(label, selected):
+    return {
+        "seed_label": label,
+        "wikitree_id": selected.get("Name"),
+        "person_id": selected.get("Id"),
+        "first_name": selected.get("FirstName"),
+        "last_name_at_birth": selected.get("LastNameAtBirth"),
+        "birth_date": selected.get("BirthDate"),
+        "birth_location": selected.get("BirthLocation"),
+        "selection_method": selected.get("SelectionMethod"),
+    }
 
 
 def main():
     raw_search_results = {}
     raw_ancestor_results = {}
-
     selected_seeds = []
-    all_people_by_wikitree_id = {}
-    all_relationships = []
+    people_by_wikitree_id = {}
+    relationships = []
 
-    for figures in TEST_FIGURES:
-        label = figures["label"]
-        print(f"\nSearching seed: {label}")
-
-        search_response = search_person(figures)
-        raw_search_results[label] = search_response
-
-        selected = choose_best_search_match(figures, search_response)
-
-        if not selected:
-            print(f"  No match found for {label}")
-            continue
-
-        profile_key = selected.get("Name")
-
-        if not profile_key:
-            print(f"Match found but no WikiTree Name/key for {label}")
-            continue
-
-        print(f" Selected WikiTree profile: {profile_key}")
-
-        selected_seeds.append(
-            {
-                "seed_label": label,
-                "wikitree_id": profile_key,
-                "person_id": selected.get("Id"),
-                "first_name": selected.get("FirstName"),
-                "last_name_at_birth": selected.get("LastNameAtBirth"),
-                "birth_date": selected.get("BirthDate"),
-                "birth_location": selected.get("BirthLocation"),
-                "selection_method": selected.get("SelectionMethod"),
-            }
+    for seed in SEED_FIGURES:
+        process_seed(
+            seed,
+            raw_search_results,
+            raw_ancestor_results,
+            selected_seeds,
+            people_by_wikitree_id,
+            relationships,
         )
 
-        time.sleep(REQUEST_DELAY_SECONDS)
-
-        print(f"  Fetching ancestors depth={ANCESTOR_DEPTH}")
-        ancestor_response = get_ancestors(profile_key, depth=ANCESTOR_DEPTH)
-        raw_ancestor_results[profile_key] = ancestor_response
-
-        profiles = flatten_api_profiles(ancestor_response)
-
-        if selected.get("Id") or selected.get("FirstName") or selected.get("BirthDate"):
-            profiles.append(selected)
-
-        for profile in profiles:
-            wikitree_id = profile.get("Name")
-            if not wikitree_id:
-                continue
-
-            new_person = normalise_person(profile)
-
-            existing_person = all_people_by_wikitree_id.get(wikitree_id)
-
-            if existing_person is None:
-                all_people_by_wikitree_id[wikitree_id] = new_person
-            else:
-                existing_filled_fields = sum(value is not None and value != "" for value in existing_person.values())
-                new_filled_fields = sum(value is not None and value != "" for value in new_person.values())
-
-                if new_filled_fields > existing_filled_fields:
-                    all_people_by_wikitree_id[wikitree_id] = new_person
-
-            all_relationships.extend(extract_relationships(profile))
-
-        time.sleep(REQUEST_DELAY_SECONDS)
-
-    relationship_df = pd.DataFrame(all_relationships)
-    if not relationship_df.empty:
-        relationship_df = relationship_df.drop_duplicates()
-
-    people_df = pd.DataFrame(all_people_by_wikitree_id.values())
-    seed_df = pd.DataFrame(selected_seeds)
-
-    with open(OUTPUT_DIR / "raw_search_results.json", "w", encoding="utf-8") as f:
-        json.dump(raw_search_results, f, indent=2, ensure_ascii=False)
-
-    with open(OUTPUT_DIR / "raw_ancestor_results.json", "w", encoding="utf-8") as f:
-        json.dump(raw_ancestor_results, f, indent=2, ensure_ascii=False)
-
-    seed_df.to_csv(OUTPUT_DIR / "seed_profiles.csv", index=False)
-    people_df.to_csv(OUTPUT_DIR / "people.csv", index=False)
-    relationship_df.to_csv(OUTPUT_DIR / "relationships.csv", index=False)
+    seed_df, people_df, relationship_df = save_outputs(
+        raw_search_results,
+        raw_ancestor_results,
+        selected_seeds,
+        people_by_wikitree_id,
+        relationships,
+    )
 
     print("\nDone.")
     print(f"Seed profiles saved: {len(seed_df)}")
