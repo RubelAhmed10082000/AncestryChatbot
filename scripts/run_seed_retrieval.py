@@ -1,39 +1,6 @@
-"""
-Evaluate candidate_retrieval.py against the WikiTree seed figures.
-
-Inputs expected:
-    data/wikitree_schema/person.csv
-    data/wikitree_schema/names.csv
-    data/wikitree_schema/event.csv
-
-Optional input, used to infer expected WikiTree IDs where they are not hard-coded:
-    data/wikitree_test/seed_profiles.csv
-
-Outputs:
-    data/evaluation/seed_retrieval_evaluation.csv
-    data/evaluation/seed_candidate_results.csv
-    data/evaluation/seed_retrieval_summary.csv
-
-Run from your project root:
-    python evaluate_seed_retrieval.py
-
-Useful options:
-    python evaluate_seed_retrieval.py --top-k 10
-    python evaluate_seed_retrieval.py --schema-dir data/wikitree_schema --seed-profiles data/wikitree_test/seed_profiles.csv
-
-Notes:
-    - This script evaluates the deterministic baseline in candidate_retrieval.py.
-    - It uses only the fields supplied in the seed list: first name, last name, birth year.
-    - For seeds without a hard-coded known_wikitree_id, it tries to infer the expected
-      WikiTree ID from seed_profiles.csv produced by extract.py.
-    - Seeds not present in the extracted dataset are marked as skipped rather than failed.
-"""
-
 from __future__ import annotations
-
 import argparse
 import importlib.util
-import math
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -42,9 +9,6 @@ from typing import Any
 import pandas as pd
 
 
-# -----------------------------------------------------------------------------
-# Defaults
-# -----------------------------------------------------------------------------
 
 DEFAULT_SCHEMA_DIR = Path("data/wikitree_schema")
 DEFAULT_SEED_PROFILES_PATH = Path("data/wikitree_test/seed_profiles.csv")
@@ -52,7 +16,7 @@ DEFAULT_OUTPUT_DIR = Path("data/evaluation")
 DEFAULT_CANDIDATE_MODULE_PATH = Path("app/retrieval/candidate_retrieval.py")
 
 
-SEED_FIGURES: list[dict[str, str | None]] = [
+SEED_FIGURES = [
     {
         "label": "Samuel Langhorne Clemens / Mark Twain",
         "first_name": "Samuel",
@@ -126,10 +90,7 @@ SEED_FIGURES: list[dict[str, str | None]] = [
 ]
 
 
-# Optional fallback expected IDs for your current seed list.
-# These are only used if seed_profiles.csv is missing or does not contain the row.
-# Newton and Ada are intentionally not hard-coded because your current extraction selected
-# the wrong-looking Newton profile and found no Ada profile; the script should expose that.
+
 EXPECTED_ID_FALLBACKS = {
     "Charles Darwin": "Darwin-15",
     "Jane Austen": "Austen-489",
@@ -138,12 +99,6 @@ EXPECTED_ID_FALLBACKS = {
     "Winston Churchill": "Churchill-4",
     "Isambard Kingdom Brunel": "Brunel-8",
 }
-
-
-# -----------------------------------------------------------------------------
-# Data structures
-# -----------------------------------------------------------------------------
-
 
 @dataclass(frozen=True)
 class SeedCase:
@@ -156,12 +111,7 @@ class SeedCase:
     expected_source: str
 
 
-# -----------------------------------------------------------------------------
-# Helpers
-# -----------------------------------------------------------------------------
-
-
-def parse_birth_year(birth_date: str | None) -> int | None:
+def parse_birth_year(birth_date):
     if not birth_date:
         return None
     try:
@@ -170,7 +120,7 @@ def parse_birth_year(birth_date: str | None) -> int | None:
         return None
 
 
-def clean_text(value: Any) -> str | None:
+def clean_text(value):
     if value is None:
         return None
     try:
@@ -183,7 +133,6 @@ def clean_text(value: Any) -> str | None:
 
 
 def load_candidate_retriever(module_path: Path):
-    """Dynamically import CandidateRetriever from candidate_retrieval.py."""
     module_path = module_path.resolve()
     if not module_path.exists():
         raise FileNotFoundError(
@@ -205,8 +154,7 @@ def load_candidate_retriever(module_path: Path):
     return module.CandidateRetriever
 
 
-def load_seed_profile_expected_ids(seed_profiles_path: Path) -> dict[str, str]:
-    """Load label -> wikitree_id from seed_profiles.csv if available."""
+def load_seed_profile_expected_ids(seed_profiles_path: Path):
     if not seed_profiles_path.exists():
         return {}
 
@@ -223,11 +171,10 @@ def load_seed_profile_expected_ids(seed_profiles_path: Path) -> dict[str, str]:
     return mapping
 
 
-def build_seed_cases(seed_profiles_path: Path) -> list[SeedCase]:
-    """Create test cases, using hard-coded IDs first, then seed_profiles.csv, then fallbacks."""
+def build_seed_cases(seed_profiles_path: Path):
     inferred_ids = load_seed_profile_expected_ids(seed_profiles_path)
 
-    cases: list[SeedCase] = []
+    cases = []
     for seed in SEED_FIGURES:
         label = str(seed["label"])
         known_id = clean_text(seed.get("known_wikitree_id"))
@@ -262,13 +209,13 @@ def build_seed_cases(seed_profiles_path: Path) -> list[SeedCase]:
     return cases
 
 
-def reciprocal_rank(rank: int | None) -> float:
+def reciprocal_rank(rank):
     if rank is None or rank <= 0:
         return 0.0
     return round(1.0 / rank, 6)
 
 
-def make_empty_result_row(case: SeedCase, status: str, notes: str) -> dict[str, Any]:
+def make_empty_result_row(case, status, notes):
     return {
         "label": case.label,
         "query_first_name": case.first_name,
@@ -289,14 +236,9 @@ def make_empty_result_row(case: SeedCase, status: str, notes: str) -> dict[str, 
     }
 
 
-# -----------------------------------------------------------------------------
-# Evaluation
-# -----------------------------------------------------------------------------
-
-
-def evaluate_cases(*, retriever: Any, cases: list[SeedCase], top_k: int) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    evaluation_rows: list[dict[str, Any]] = []
-    candidate_rows: list[dict[str, Any]] = []
+def evaluate_cases(*, retriever, cases, top_k):
+    evaluation_rows = []
+    candidate_rows = []
 
     for case in cases:
         if not case.expected_wikitree_id:
@@ -378,14 +320,13 @@ def evaluate_cases(*, retriever: Any, cases: list[SeedCase], top_k: int) -> tupl
     return evaluation_df, candidate_df, summary_df
 
 
-def build_summary(evaluation_df: pd.DataFrame) -> pd.DataFrame:
-    """Build a compact metrics table."""
+def build_summary(evaluation_df):
     eligible = evaluation_df[evaluation_df["status"] != "skipped"].copy()
     total_cases = len(evaluation_df)
     eligible_cases = len(eligible)
     skipped_cases = int((evaluation_df["status"] == "skipped").sum())
 
-    def rate(column: str) -> float:
+    def rate(column):
         if eligible_cases == 0:
             return 0.0
         return round(float(eligible[column].mean()), 4)
@@ -406,10 +347,6 @@ def build_summary(evaluation_df: pd.DataFrame) -> pd.DataFrame:
     ]
     return pd.DataFrame(rows, columns=["metric", "value"])
 
-
-# -----------------------------------------------------------------------------
-# CLI
-# -----------------------------------------------------------------------------
 
 
 def parse_args() -> argparse.Namespace:
