@@ -355,6 +355,3 @@ def main():
     print(f"Relationships saved: {len(relationship_df)}")
     print(f"Output folder: {OUTPUT_DIR.resolve()}")
 
-
-if __name__ == "__main__":
-    main()
