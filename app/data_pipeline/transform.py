@@ -1,8 +1,8 @@
-
 import json
 import re
 import uuid
 from pathlib import Path
+
 import pandas as pd
 
 
@@ -20,31 +20,71 @@ RELATIONSHIP_REJECTIONS_OUTPUT = OUTPUT_DIR / "relationship_rejections.csv"
 QUALITY_REPORT_OUTPUT = OUTPUT_DIR / "transform_quality_report.csv"
 
 WIKITREE_PROFILE_BASE_URL = "https://www.wikitree.com/wiki/"
-
 PROJECT_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_URL, "from-conversation-to-family-trees/wikitree-schema-v0.1")
 
 UNKNOWN_VALUES = {
-    "",
-    " ",
-    "nan",
-    "NaN",
-    "None",
-    "none",
-    "NULL",
-    "null",
-    "Unknown",
-    "unknown",
-    "UNKNOWN",
-    "0000-00-00",
-    "0000",
-    "0",
-    "0.0",
+    "", " ", "nan", "NaN", "None", "none", "NULL", "null",
+    "Unknown", "unknown", "UNKNOWN", "0000-00-00", "0000", "0", "0.0",
 }
+
+PERSON_COLUMNS = ["Person_ID", "Wikitree_ID", "Gender", "Profile_URL", "Has_Children"]
+
+NAME_COLUMNS = [
+    "Name_ID",
+    "Person_ID",
+    "Last_Name_Current",
+    "Last_Name_At_Birth",
+    "Middle_Name",
+    "Middle_Initials",
+    "First_Name",
+    "Prefix",
+    "Suffix",
+    "Nicknames",
+]
+
+EVENT_COLUMNS = [
+    "Marriage_ID",
+    "Person_ID_1",
+    "Person_ID_2",
+    "Event_Type",
+    "Event_Raw_Date",
+    "Event_Month",
+    "Event_Day",
+    "Event_Year",
+    "Event_Location",
+    "Data Status",
+]
+
+PEOPLE_INPUT_COLUMNS = [
+    "person_id",
+    "wikitree_id",
+    "first_name",
+    "middle_name",
+    "last_name_at_birth",
+    "last_name_current",
+    "birth_date",
+    "birth_location",
+    "death_date",
+    "death_location",
+    "gender",
+    "father_id",
+    "mother_id",
+    "privacy",
+    "data_status",
+]
+
+RELATIONSHIP_INPUT_COLUMNS = ["parent_id", "child_id", "child_wikitree_id", "relationship_type"]
 
 
 def clean_text(value):
-    if pd.isna(value):
+    if value is None:
         return None
+
+    try:
+        if pd.isna(value):
+            return None
+    except TypeError:
+        pass
 
     text = str(value).strip()
     if text in UNKNOWN_VALUES:
@@ -52,7 +92,6 @@ def clean_text(value):
 
     text = re.sub(r"\s+", " ", text)
     return text or None
-
 
 
 def clean_id(value):
@@ -66,45 +105,18 @@ def clean_id(value):
     return text
 
 
-
 def normalise_gender(value):
     text = clean_text(value)
     if text is None:
         return None
 
-    lower = text.lower()
-    if lower in {"male", "m"}:
+    text = text.lower()
+    if text in ["male", "m"]:
         return "Male"
-    if lower in {"female", "f"}:
+    if text in ["female", "f"]:
         return "Female"
+
     return "Unknown"
-
-
-
-def parse_date_parts(value):
-    raw = clean_text(value)
-    if raw is None:
-        return None, None, None, None
-
-    year_match = re.search(r"(\d{3,4})", raw)
-    year = int(year_match.group(1)) if year_match else None
-
-    month = None
-    day = None
-
-    iso_match = re.match(r"^(\d{4})-(\d{2})-(\d{2})$", raw)
-    if iso_match:
-        year = int(iso_match.group(1))
-        raw_month = int(iso_match.group(2))
-        raw_day = int(iso_match.group(3))
-        month = raw_month if 1 <= raw_month <= 12 else None
-        day = raw_day if 1 <= raw_day <= 31 else None
-
-    if year is not None and year <= 0:
-        year = None
-
-    return raw, year, month, day
-
 
 
 def clean_location(value):
@@ -118,6 +130,35 @@ def clean_location(value):
     return text or None
 
 
+def parse_date_parts(value):
+    raw = clean_text(value)
+    if raw is None:
+        return None, None, None, None
+
+    year = None
+    month = None
+    day = None
+
+    year_match = re.search(r"(\d{3,4})", raw)
+    if year_match:
+        year = int(year_match.group(1))
+
+    iso_match = re.match(r"^(\d{4})-(\d{2})-(\d{2})$", raw)
+    if iso_match:
+        year = int(iso_match.group(1))
+        raw_month = int(iso_match.group(2))
+        raw_day = int(iso_match.group(3))
+
+        if 1 <= raw_month <= 12:
+            month = raw_month
+        if 1 <= raw_day <= 31:
+            day = raw_day
+
+    if year is not None and year <= 0:
+        year = None
+
+    return raw, year, month, day
+
 
 def parse_data_status(value):
     text = clean_text(value)
@@ -125,25 +166,26 @@ def parse_data_status(value):
         return {}
 
     try:
-        parsed = json.loads(text)
-        return parsed if isinstance(parsed, dict) else {}
+        data = json.loads(text)
     except json.JSONDecodeError:
         return {}
 
+    if isinstance(data, dict):
+        return data
+
+    return {}
 
 
 def status_for_field(row, field_name):
-    status = row.get("_parsed_data_status")
-    if isinstance(status, dict):
-        value = status.get(field_name)
-        return clean_text(value)
-    return None
+    data_status = row.get("_parsed_data_status")
+    if not isinstance(data_status, dict):
+        return None
 
+    return clean_text(data_status.get(field_name))
 
 
 def stable_uuid(entity_type, natural_key):
     return str(uuid.uuid5(PROJECT_NAMESPACE, f"{entity_type}:{natural_key}"))
-
 
 
 def profile_url(wikitree_id):
@@ -152,17 +194,28 @@ def profile_url(wikitree_id):
     return f"{WIKITREE_PROFILE_BASE_URL}{wikitree_id}"
 
 
-
 def read_csv_required(path):
     if not path.exists():
         raise FileNotFoundError(f"Missing required input file: {path}")
+
     return pd.read_csv(path, dtype=str, keep_default_na=False)
+
+
+def add_missing_columns(df, columns):
+    for col in columns:
+        if col not in df.columns:
+            df[col] = None
+    return df
+
 
 def prepare_people(raw_people):
     df = raw_people.copy()
+    df = add_missing_columns(df, PEOPLE_INPUT_COLUMNS)
 
-    expected_columns = [
-        "person_id",
+    for col in ["person_id", "father_id", "mother_id"]:
+        df[col] = df[col].apply(clean_id)
+
+    text_cols = [
         "wikitree_id",
         "first_name",
         "middle_name",
@@ -172,34 +225,12 @@ def prepare_people(raw_people):
         "birth_location",
         "death_date",
         "death_location",
-        "gender",
-        "father_id",
-        "mother_id",
         "privacy",
         "data_status",
     ]
 
-    for column in expected_columns:
-        if column not in df.columns:
-            df[column] = None
-
-    for column in ["person_id", "father_id", "mother_id"]:
-        df[column] = df[column].apply(clean_id)
-
-    for column in [
-        "wikitree_id",
-        "first_name",
-        "middle_name",
-        "last_name_at_birth",
-        "last_name_current",
-        "birth_date",
-        "birth_location",
-        "death_date",
-        "death_location",
-        "privacy",
-        "data_status",
-    ]:
-        df[column] = df[column].apply(clean_text)
+    for col in text_cols:
+        df[col] = df[col].apply(clean_text)
 
     df["gender"] = df["gender"].apply(normalise_gender)
     df["birth_location"] = df["birth_location"].apply(clean_location)
@@ -207,25 +238,18 @@ def prepare_people(raw_people):
     df["_parsed_data_status"] = df["data_status"].apply(parse_data_status)
 
     df = df[df["person_id"].notna() & df["wikitree_id"].notna()].copy()
-
     df = df.drop_duplicates(subset=["person_id"], keep="first")
     df = df.drop_duplicates(subset=["wikitree_id"], keep="first")
 
-    df["schema_person_id"] = df["wikitree_id"].apply(lambda key: stable_uuid("person", key))
-    df["schema_name_id"] = df["wikitree_id"].apply(lambda key: stable_uuid("name", key))
+    df["schema_person_id"] = df["wikitree_id"].apply(lambda value: stable_uuid("person", value))
+    df["schema_name_id"] = df["wikitree_id"].apply(lambda value: stable_uuid("name", value))
 
     return df.reset_index(drop=True)
 
 
-
-def prepare_relationships(raw_relationships: pd.DataFrame) -> pd.DataFrame:
-    """Clean raw relationship rows from extract.py."""
+def prepare_relationships(raw_relationships):
     df = raw_relationships.copy()
-
-    expected_columns = ["parent_id", "child_id", "child_wikitree_id", "relationship_type"]
-    for column in expected_columns:
-        if column not in df.columns:
-            df[column] = None
+    df = add_missing_columns(df, RELATIONSHIP_INPUT_COLUMNS)
 
     df["parent_id"] = df["parent_id"].apply(clean_id)
     df["child_id"] = df["child_id"].apply(clean_id)
@@ -238,89 +262,56 @@ def prepare_relationships(raw_relationships: pd.DataFrame) -> pd.DataFrame:
     return df.reset_index(drop=True)
 
 
-def build_person_table(people: pd.DataFrame, relationships: pd.DataFrame) -> pd.DataFrame:
-    """Build Person table matching the uploaded V0.1 schema."""
-    parent_ids_with_children = set(relationships["parent_id"].dropna())
+def build_person_table(people, relationships):
+    parent_ids = set(relationships["parent_id"].dropna())
+    rows = []
 
-    records = []
     for _, row in people.iterrows():
         source_person_id = row["person_id"]
         wikitree_id = row["wikitree_id"]
 
-        records.append(
-            {
-                "Person_ID": row["schema_person_id"],
-                "Wikitree_ID": wikitree_id,
-                "Gender": row["gender"],
-                "Profile_URL": profile_url(wikitree_id),
-                "Has_Children": source_person_id in parent_ids_with_children,
-            }
-        )
+        rows.append({
+            "Person_ID": row["schema_person_id"],
+            "Wikitree_ID": wikitree_id,
+            "Gender": row["gender"],
+            "Profile_URL": profile_url(wikitree_id),
+            "Has_Children": source_person_id in parent_ids,
+        })
 
-    return pd.DataFrame(
-        records,
-        columns=["Person_ID", "Wikitree_ID", "Gender", "Profile_URL", "Has_Children"],
-    )
+    return pd.DataFrame(rows, columns=PERSON_COLUMNS)
 
 
-
-def build_names_table(people: pd.DataFrame) -> pd.DataFrame:
-    """Build Names table matching the uploaded V0.1 schema."""
-    records = []
+def build_names_table(people):
+    rows = []
 
     for _, row in people.iterrows():
         middle_name = clean_text(row.get("middle_name"))
         middle_initials = None
+
         if middle_name:
-            middle_initials = "".join(part[0].upper() for part in middle_name.split() if part)
+            initials = []
+            for part in middle_name.split():
+                if part:
+                    initials.append(part[0].upper())
+            middle_initials = "".join(initials) or None
 
-        records.append(
-            {
-                "Name_ID": row["schema_name_id"],
-                "Person_ID": row["schema_person_id"],
-                "Last_Name_Current": clean_text(row.get("last_name_current")),
-                "Last_Name_At_Birth": clean_text(row.get("last_name_at_birth")),
-                "Middle_Name": middle_name,
-                "Middle_Initials": middle_initials,
-                "First_Name": clean_text(row.get("first_name")),
-                "Prefix": None,
-                "Suffix": None,
-                "Nicknames": None,
-            }
-        )
+        rows.append({
+            "Name_ID": row["schema_name_id"],
+            "Person_ID": row["schema_person_id"],
+            "Last_Name_Current": clean_text(row.get("last_name_current")),
+            "Last_Name_At_Birth": clean_text(row.get("last_name_at_birth")),
+            "Middle_Name": middle_name,
+            "Middle_Initials": middle_initials,
+            "First_Name": clean_text(row.get("first_name")),
+            "Prefix": None,
+            "Suffix": None,
+            "Nicknames": None,
+        })
 
-    return pd.DataFrame(
-        records,
-        columns=[
-            "Name_ID",
-            "Person_ID",
-            "Last_Name_Current",
-            "Last_Name_At_Birth",
-            "Middle_Name",
-            "Middle_Initials",
-            "First_Name",
-            "Prefix",
-            "Suffix",
-            "Nicknames",
-        ],
-    )
+    return pd.DataFrame(rows, columns=NAME_COLUMNS)
 
 
-
-def event_row(
-    *,
-    event_key,
-    person_id_1,
-    person_id_2,
-    event_type,
-    raw_date,
-    month,
-    day,
-    year,
-    location,
-    data_status,
-):
-    """Create one event row using the V0.1 Event column names."""
+def make_event_row(event_key, person_id_1, person_id_2, event_type, raw_date=None, month=None, day=None, year=None, location=None, data_status=None):
     return {
         "Marriage_ID": stable_uuid("event", event_key),
         "Person_ID_1": person_id_1,
@@ -335,159 +326,120 @@ def event_row(
     }
 
 
-
-def build_event_table(people, relationships):
-    """
-    Build Event table from birth, death, and parent-child relationships.
-
-    Returns:
-        event_df, relationship_rejections_df
-    """
-    events = []
-    rejections = []
-
-    source_id_to_schema_id = dict(zip(people["person_id"], people["schema_person_id"]))
-    source_id_to_wikitree_id = dict(zip(people["person_id"], people["wikitree_id"]))
-
+def add_life_events(events, people):
     for _, row in people.iterrows():
         schema_person_id = row["schema_person_id"]
         wikitree_id = row["wikitree_id"]
 
         birth_raw, birth_year, birth_month, birth_day = parse_date_parts(row.get("birth_date"))
         if birth_raw or row.get("birth_location"):
-            events.append(
-                event_row(
-                    event_key=f"{wikitree_id}:birth",
-                    person_id_1=schema_person_id,
-                    person_id_2=None,
-                    event_type="birth",
-                    raw_date=birth_raw,
-                    month=birth_month,
-                    day=birth_day,
-                    year=birth_year,
-                    location=row.get("birth_location"),
-                    data_status=status_for_field(row, "BirthDate") or status_for_field(row, "BirthLocation"),
-                )
-            )
+            events.append(make_event_row(
+                event_key=f"{wikitree_id}:birth",
+                person_id_1=schema_person_id,
+                person_id_2=None,
+                event_type="birth",
+                raw_date=birth_raw,
+                month=birth_month,
+                day=birth_day,
+                year=birth_year,
+                location=row.get("birth_location"),
+                data_status=status_for_field(row, "BirthDate") or status_for_field(row, "BirthLocation"),
+            ))
 
         death_raw, death_year, death_month, death_day = parse_date_parts(row.get("death_date"))
         if death_raw or row.get("death_location"):
-            events.append(
-                event_row(
-                    event_key=f"{wikitree_id}:death",
-                    person_id_1=schema_person_id,
-                    person_id_2=None,
-                    event_type="death",
-                    raw_date=death_raw,
-                    month=death_month,
-                    day=death_day,
-                    year=death_year,
-                    location=row.get("death_location"),
-                    data_status=status_for_field(row, "DeathDate") or status_for_field(row, "DeathLocation"),
-                )
-            )
+            events.append(make_event_row(
+                event_key=f"{wikitree_id}:death",
+                person_id_1=schema_person_id,
+                person_id_2=None,
+                event_type="death",
+                raw_date=death_raw,
+                month=death_month,
+                day=death_day,
+                year=death_year,
+                location=row.get("death_location"),
+                data_status=status_for_field(row, "DeathDate") or status_for_field(row, "DeathLocation"),
+            ))
+
+
+def add_relationship_events(events, rejections, people, relationships):
+    id_to_schema_id = dict(zip(people["person_id"], people["schema_person_id"]))
+    id_to_wikitree_id = dict(zip(people["person_id"], people["wikitree_id"]))
 
     for _, rel in relationships.iterrows():
         parent_source_id = rel.get("parent_id")
         child_source_id = rel.get("child_id")
         relationship_type = clean_text(rel.get("relationship_type")) or "parent_of"
 
-        parent_schema_id = source_id_to_schema_id.get(parent_source_id)
-        child_schema_id = source_id_to_schema_id.get(child_source_id)
+        parent_schema_id = id_to_schema_id.get(parent_source_id)
+        child_schema_id = id_to_schema_id.get(child_source_id)
 
         if not parent_schema_id or not child_schema_id:
-            rejections.append(
-                {
-                    "parent_id": parent_source_id,
-                    "child_id": child_source_id,
-                    "child_wikitree_id": rel.get("child_wikitree_id"),
-                    "relationship_type": relationship_type,
-                    "reason": "parent_or_child_not_present_in_people_csv",
-                }
-            )
+            rejections.append({
+                "parent_id": parent_source_id,
+                "child_id": child_source_id,
+                "child_wikitree_id": rel.get("child_wikitree_id"),
+                "relationship_type": relationship_type,
+                "reason": "parent_or_child_not_present_in_people_csv",
+            })
             continue
 
-        parent_wikitree_id = source_id_to_wikitree_id.get(parent_source_id)
-        child_wikitree_id = source_id_to_wikitree_id.get(child_source_id)
+        parent_wikitree_id = id_to_wikitree_id.get(parent_source_id)
+        child_wikitree_id = id_to_wikitree_id.get(child_source_id)
         event_key = f"{parent_wikitree_id}:{relationship_type}:{child_wikitree_id}"
 
-        events.append(
-            event_row(
-                event_key=event_key,
-                person_id_1=parent_schema_id,
-                person_id_2=child_schema_id,
-                event_type=relationship_type,
-                raw_date=None,
-                month=None,
-                day=None,
-                year=None,
-                location=None,
-                data_status=None,
-            )
-        )
+        events.append(make_event_row(
+            event_key=event_key,
+            person_id_1=parent_schema_id,
+            person_id_2=child_schema_id,
+            event_type=relationship_type,
+        ))
 
-    event_df = pd.DataFrame(
-        events,
-        columns=[
-            "Marriage_ID",
-            "Person_ID_1",
-            "Person_ID_2",
-            "Event_Type",
-            "Event_Raw_Date",
-            "Event_Month",
-            "Event_Day",
-            "Event_Year",
-            "Event_Location",
-            "Data Status",
-        ],
-    ).drop_duplicates(subset=["Marriage_ID"], keep="first")
 
-    rejections_df = pd.DataFrame(
-        rejections,
-        columns=["parent_id", "child_id", "child_wikitree_id", "relationship_type", "reason"],
-    )
+def build_event_table(people, relationships):
+    events = []
+    rejections = []
+
+    add_life_events(events, people)
+    add_relationship_events(events, rejections, people, relationships)
+
+    event_df = pd.DataFrame(events, columns=EVENT_COLUMNS)
+    if not event_df.empty:
+        event_df = event_df.drop_duplicates(subset=["Marriage_ID"], keep="first")
+
+    rejection_cols = ["parent_id", "child_id", "child_wikitree_id", "relationship_type", "reason"]
+    rejections_df = pd.DataFrame(rejections, columns=rejection_cols)
 
     return event_df.reset_index(drop=True), rejections_df.reset_index(drop=True)
 
 
+def build_id_crosswalk(people):
+    cols = [
+        "person_id",
+        "wikitree_id",
+        "schema_person_id",
+        "schema_name_id",
+        "first_name",
+        "middle_name",
+        "last_name_at_birth",
+        "last_name_current",
+    ]
 
-def build_id_crosswalk(people: pd.DataFrame) -> pd.DataFrame:
-    """Build source-to-schema ID mapping for debugging and database loading."""
-    return people[
-        [
-            "person_id",
-            "wikitree_id",
-            "schema_person_id",
-            "schema_name_id",
-            "first_name",
-            "middle_name",
-            "last_name_at_birth",
-            "last_name_current",
-        ]
-    ].rename(
-        columns={
-            "person_id": "source_wikitree_numeric_id",
-            "wikitree_id": "Wikitree_ID",
-            "schema_person_id": "Person_ID",
-            "schema_name_id": "Name_ID",
-        }
-    )
+    df = people[cols].copy()
+    df = df.rename(columns={
+        "person_id": "source_wikitree_numeric_id",
+        "wikitree_id": "Wikitree_ID",
+        "schema_person_id": "Person_ID",
+        "schema_name_id": "Name_ID",
+    })
 
+    return df
 
 
-def build_quality_report(
-    *,
-    raw_people: pd.DataFrame,
-    people: pd.DataFrame,
-    raw_relationships: pd.DataFrame,
-    relationships: pd.DataFrame,
-    person_table: pd.DataFrame,
-    names_table: pd.DataFrame,
-    event_table: pd.DataFrame,
-    rejections: pd.DataFrame,
-) -> pd.DataFrame:
-    """Summarise transformation results."""
-    event_counts = event_table["Event_Type"].value_counts(dropna=False).to_dict()
+def build_quality_report(raw_people, people, raw_relationships, relationships, person_table, names_table, event_table, rejections):
+    event_counts = {}
+    if not event_table.empty and "Event_Type" in event_table.columns:
+        event_counts = event_table["Event_Type"].value_counts(dropna=False).to_dict()
 
     metrics = [
         {"metric": "raw_people_rows", "value": len(raw_people)},
@@ -509,9 +461,31 @@ def build_quality_report(
 
     return pd.DataFrame(metrics, columns=["metric", "value"])
 
-def main():
+
+def save_outputs(person_table, names_table, event_table, id_crosswalk, rejections, quality_report):
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
+    person_table.to_csv(PERSON_OUTPUT, index=False)
+    names_table.to_csv(NAMES_OUTPUT, index=False)
+    event_table.to_csv(EVENT_OUTPUT, index=False)
+    id_crosswalk.to_csv(ID_CROSSWALK_OUTPUT, index=False)
+    rejections.to_csv(RELATIONSHIP_REJECTIONS_OUTPUT, index=False)
+    quality_report.to_csv(QUALITY_REPORT_OUTPUT, index=False)
+
+
+def print_summary(person_table, names_table, event_table, rejections, quality_report):
+    print("Transformation complete.")
+    print(f"Person rows: {len(person_table)} -> {PERSON_OUTPUT}")
+    print(f"Names rows: {len(names_table)} -> {NAMES_OUTPUT}")
+    print(f"Event rows: {len(event_table)} -> {EVENT_OUTPUT}")
+    print(f"Rejected relationship rows: {len(rejections)} -> {RELATIONSHIP_REJECTIONS_OUTPUT}")
+    print(f"ID crosswalk: {ID_CROSSWALK_OUTPUT}")
+    print(f"Quality report: {QUALITY_REPORT_OUTPUT}")
+    print("\nQuality report:")
+    print(quality_report.to_string(index=False))
+
+
+def main():
     raw_people = read_csv_required(PEOPLE_INPUT)
     raw_relationships = read_csv_required(RELATIONSHIPS_INPUT)
 
@@ -524,32 +498,19 @@ def main():
     id_crosswalk = build_id_crosswalk(people)
 
     quality_report = build_quality_report(
-        raw_people=raw_people,
-        people=people,
-        raw_relationships=raw_relationships,
-        relationships=relationships,
-        person_table=person_table,
-        names_table=names_table,
-        event_table=event_table,
-        rejections=rejections,
+        raw_people,
+        people,
+        raw_relationships,
+        relationships,
+        person_table,
+        names_table,
+        event_table,
+        rejections,
     )
 
-    person_table.to_csv(PERSON_OUTPUT, index=False)
-    names_table.to_csv(NAMES_OUTPUT, index=False)
-    event_table.to_csv(EVENT_OUTPUT, index=False)
-    id_crosswalk.to_csv(ID_CROSSWALK_OUTPUT, index=False)
-    rejections.to_csv(RELATIONSHIP_REJECTIONS_OUTPUT, index=False)
-    quality_report.to_csv(QUALITY_REPORT_OUTPUT, index=False)
-
-    print("Transformation complete.")
-    print(f"Person rows: {len(person_table)} -> {PERSON_OUTPUT}")
-    print(f"Names rows: {len(names_table)} -> {NAMES_OUTPUT}")
-    print(f"Event rows: {len(event_table)} -> {EVENT_OUTPUT}")
-    print(f"Rejected relationship rows: {len(rejections)} -> {RELATIONSHIP_REJECTIONS_OUTPUT}")
-    print(f"ID crosswalk: {ID_CROSSWALK_OUTPUT}")
-    print(f"Quality report: {QUALITY_REPORT_OUTPUT}")
-    print("\nQuality report:")
-    print(quality_report.to_string(index=False))
+    save_outputs(person_table, names_table, event_table, id_crosswalk, rejections, quality_report)
+    print_summary(person_table, names_table, event_table, rejections, quality_report)
 
 
-
+if __name__ == "__main__":
+    main()
