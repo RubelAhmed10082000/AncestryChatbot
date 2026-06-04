@@ -415,6 +415,4 @@ def generate_html(nodes: pd.DataFrame, edges: pd.DataFrame, root_label: str, out
 
         if profile_url:
             node_svg.append("</a>")
-
-  
 """
