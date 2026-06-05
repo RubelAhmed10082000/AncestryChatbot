@@ -447,7 +447,14 @@ def is_missing_number(value):
         return True
 
 
-def explain_matches(scores):
+def explain_matches(scores: dict) -> str:
+    """
+    Provides placeholder explanation for ranks
+    Args - 
+        scores(dict): scores for record matching
+    Returns - 
+        string: placeholder explanation for ranking 
+    """
     labels = {
         "first_name_score": "first name",
         "last_name_score": "last name",
