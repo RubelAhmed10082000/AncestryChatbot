@@ -2,16 +2,17 @@ import json
 import re
 import uuid
 from pathlib import Path
-
 import pandas as pd
 
 
 INPUT_DIR = Path("data/wikitree_test")
 OUTPUT_DIR = Path("data/wikitree_schema")
 
+# Input  filepaths
 PEOPLE_INPUT = INPUT_DIR / "people.csv"
 RELATIONSHIPS_INPUT = INPUT_DIR / "relationships.csv"
 
+# Output file paths
 PERSON_OUTPUT = OUTPUT_DIR / "person.csv"
 NAMES_OUTPUT = OUTPUT_DIR / "names.csv"
 EVENT_OUTPUT = OUTPUT_DIR / "event.csv"
@@ -22,11 +23,13 @@ QUALITY_REPORT_OUTPUT = OUTPUT_DIR / "transform_quality_report.csv"
 WIKITREE_PROFILE_BASE_URL = "https://www.wikitree.com/wiki/"
 PROJECT_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_URL, "from-conversation-to-family-trees/wikitree-schema-v0.1")
 
+# Unknown values allowing us to better clean the data
 UNKNOWN_VALUES = {
     "", " ", "nan", "NaN", "None", "none", "NULL", "null",
     "Unknown", "unknown", "UNKNOWN", "0000-00-00", "0000", "0", "0.0",
 }
 
+# Listing attributes from schema
 PERSON_COLUMNS = ["Person_ID", "Wikitree_ID", "Gender", "Profile_URL", "Has_Children"]
 
 NAME_COLUMNS = [
@@ -86,6 +89,7 @@ def clean_text(value):
     except TypeError:
         pass
 
+    # stripping irrelevant value from text such as whitespace or ellipsis
     text = str(value).strip()
     if text in UNKNOWN_VALUES:
         return None
@@ -93,7 +97,7 @@ def clean_text(value):
     text = re.sub(r"\s+", " ", text)
     return text or None
 
-
+# cleaning ID field
 def clean_id(value):
     text = clean_text(value)
     if text is None:
@@ -110,6 +114,7 @@ def normalise_gender(value):
     if text is None:
         return None
 
+    # Normalizing gender fields to either Male or Female values
     text = text.lower()
     if text in ["male", "m"]:
         return "Male"
@@ -139,6 +144,7 @@ def parse_date_parts(value):
     month = None
     day = None
 
+    # Matching on either year or ISO formatted date
     year_match = re.search(r"(\d{3,4})", raw)
     if year_match:
         year = int(year_match.group(1))
@@ -177,6 +183,7 @@ def parse_data_status(value):
 
 
 def status_for_field(row, field_name):
+    # Cleaning data status field if exists
     data_status = row.get("_parsed_data_status")
     if not isinstance(data_status, dict):
         return None
@@ -185,6 +192,7 @@ def status_for_field(row, field_name):
 
 
 def stable_uuid(entity_type, natural_key):
+    # Establishing a sable UUID
     return str(uuid.uuid5(PROJECT_NAMESPACE, f"{entity_type}:{natural_key}"))
 
 
@@ -208,13 +216,23 @@ def add_missing_columns(df, columns):
     return df
 
 
-def prepare_people(raw_people):
+def prepare_people(raw_people: list[str]) -> pd:
+    """
+    Cleans columns related to people 
+    Args -  
+        raw_people (list[str]): csv file containing data of people 
+    Returns -
+        pandas dataframe: dataframe of cleaned person 
+    """
+    # Replacing missing columns with Nan  
     df = raw_people.copy()
     df = add_missing_columns(df, PEOPLE_INPUT_COLUMNS)
 
+    # Cleaning id's of person, mother and father
     for col in ["person_id", "father_id", "mother_id"]:
         df[col] = df[col].apply(clean_id)
 
+    
     text_cols = [
         "wikitree_id",
         "first_name",
@@ -229,43 +247,66 @@ def prepare_people(raw_people):
         "data_status",
     ]
 
+    # Cleaning columns
     for col in text_cols:
         df[col] = df[col].apply(clean_text)
 
+    # Cleaning, normgalizing and parsing relevant columns in dataframe
     df["gender"] = df["gender"].apply(normalise_gender)
     df["birth_location"] = df["birth_location"].apply(clean_location)
     df["death_location"] = df["death_location"].apply(clean_location)
     df["_parsed_data_status"] = df["data_status"].apply(parse_data_status)
 
+    # Dropping duplicates for null valus in ID fields
     df = df[df["person_id"].notna() & df["wikitree_id"].notna()].copy()
     df = df.drop_duplicates(subset=["person_id"], keep="first")
     df = df.drop_duplicates(subset=["wikitree_id"], keep="first")
-
+    
     df["schema_person_id"] = df["wikitree_id"].apply(lambda value: stable_uuid("person", value))
     df["schema_name_id"] = df["wikitree_id"].apply(lambda value: stable_uuid("name", value))
 
     return df.reset_index(drop=True)
 
 
-def prepare_relationships(raw_relationships):
+def prepare_relationships(raw_relationships: list[str]) -> pd:
+    """
+    cleans columns related to relationships
+    Args -
+        raw_relationships(list[str]): csv file listing relationships between people
+    Return - 
+        pandas dataframe: cleaned dataframe 
+    """
     df = raw_relationships.copy()
+    # NaNing null values
     df = add_missing_columns(df, RELATIONSHIP_INPUT_COLUMNS)
 
+    # Cleaning various columns
     df["parent_id"] = df["parent_id"].apply(clean_id)
     df["child_id"] = df["child_id"].apply(clean_id)
     df["child_wikitree_id"] = df["child_wikitree_id"].apply(clean_text)
     df["relationship_type"] = df["relationship_type"].apply(clean_text)
 
+    # Dropping duplicates
     df = df[df["parent_id"].notna() & df["child_id"].notna()].copy()
     df = df.drop_duplicates(subset=["parent_id", "child_id", "relationship_type"], keep="first")
 
     return df.reset_index(drop=True)
 
 
-def build_person_table(people, relationships):
+def build_person_table(people: pd, relationships: pd) -> pd:
+    """
+    Adds rows to person table
+    Args -
+        people (pandas dataframe): cleaned dataframe of people
+        relationships (pandas dataframe): cleaned dataframe of relationships
+    Returns -
+        pandas dataframe: people dataframe with gender and has_children appended
+    """
+    # Collecting unique parent ids
     parent_ids = set(relationships["parent_id"].dropna())
     rows = []
 
+    # Building rows for persons table
     for _, row in people.iterrows():
         source_person_id = row["person_id"]
         wikitree_id = row["wikitree_id"]
@@ -281,10 +322,18 @@ def build_person_table(people, relationships):
     return pd.DataFrame(rows, columns=PERSON_COLUMNS)
 
 
-def build_names_table(people):
+def build_names_table(people: pd) -> pd:
+    """
+    Adds rows to name table
+    Args -
+        people (pd): pandas dataframe of people
+    Returns -
+        Pandas Dataframe: table with name data for each person in persons table
+    """
     rows = []
 
     for _, row in people.iterrows():
+        # Cleaning middle name
         middle_name = clean_text(row.get("middle_name"))
         middle_initials = None
 
@@ -295,6 +344,7 @@ def build_names_table(people):
                     initials.append(part[0].upper())
             middle_initials = "".join(initials) or None
 
+        # Appending rows related to name to table
         rows.append({
             "Name_ID": row["schema_name_id"],
             "Person_ID": row["schema_person_id"],
@@ -326,12 +376,22 @@ def make_event_row(event_key, person_id_1, person_id_2, event_type, raw_date=Non
     }
 
 
-def add_life_events(events, people):
+def add_life_events(events: list[str], people: list[str]) -> None:
+    """
+    Adding rows relating to life events of people
+    Args - 
+        events (list): list of events experience by a person(s)
+        people (list): list of people experiencing event
+    returns - 
+        None 
+    """
     for _, row in people.iterrows():
         schema_person_id = row["schema_person_id"]
         wikitree_id = row["wikitree_id"]
 
+        # parsing days, month, year annd dates
         birth_raw, birth_year, birth_month, birth_day = parse_date_parts(row.get("birth_date"))
+        # Appending birth data
         if birth_raw or row.get("birth_location"):
             events.append(make_event_row(
                 event_key=f"{wikitree_id}:birth",
@@ -346,6 +406,7 @@ def add_life_events(events, people):
                 data_status=status_for_field(row, "BirthDate") or status_for_field(row, "BirthLocation"),
             ))
 
+        # Appending death data
         death_raw, death_year, death_month, death_day = parse_date_parts(row.get("death_date"))
         if death_raw or row.get("death_location"):
             events.append(make_event_row(
@@ -361,12 +422,17 @@ def add_life_events(events, people):
                 data_status=status_for_field(row, "DeathDate") or status_for_field(row, "DeathLocation"),
             ))
 
-
-def add_relationship_events(events, rejections, people, relationships):
+def add_relationship_events(events: list, rejections:list, people:list[str], relationships:list[str]) -> None:
+    """
+    Appending relationship related events 
+    """
+    
     id_to_schema_id = dict(zip(people["person_id"], people["schema_person_id"]))
     id_to_wikitree_id = dict(zip(people["person_id"], people["wikitree_id"]))
-
+    
+    
     for _, rel in relationships.iterrows():
+        # Building parent-child relationship 
         parent_source_id = rel.get("parent_id")
         child_source_id = rel.get("child_id")
         relationship_type = clean_text(rel.get("relationship_type")) or "parent_of"
@@ -374,6 +440,7 @@ def add_relationship_events(events, rejections, people, relationships):
         parent_schema_id = id_to_schema_id.get(parent_source_id)
         child_schema_id = id_to_schema_id.get(child_source_id)
 
+        # Rejecting relationship if row cotains no child or parent ID
         if not parent_schema_id or not child_schema_id:
             rejections.append({
                 "parent_id": parent_source_id,
@@ -396,17 +463,29 @@ def add_relationship_events(events, rejections, people, relationships):
         ))
 
 
-def build_event_table(people, relationships):
+def build_event_table(people: list[str], relationships: list[str]) ->  pd:
+    """
+    builds event table
+    Args - 
+        people (list[str]): Data related to people
+        relationships (list[str]): Data related to relationships
+    Return -
+        pandas dataframe: dataframe of events and rejected events
+    """
     events = []
     rejections = []
 
+
+    # Adding relationships and life events to events list 
     add_life_events(events, people)
     add_relationship_events(events, rejections, people, relationships)
 
+    # Creating event pandas dataframe
     event_df = pd.DataFrame(events, columns=EVENT_COLUMNS)
     if not event_df.empty:
         event_df = event_df.drop_duplicates(subset=["Marriage_ID"], keep="first")
 
+    # Creating rejected dataframe
     rejection_cols = ["parent_id", "child_id", "child_wikitree_id", "relationship_type", "reason"]
     rejections_df = pd.DataFrame(rejections, columns=rejection_cols)
 
