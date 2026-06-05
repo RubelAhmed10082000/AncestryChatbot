@@ -52,8 +52,8 @@ import pandas as pd
 DEFAULT_SCHEMA_DIR = Path("data/wikitree_schema")
 DEFAULT_SEED_PROFILES_PATH = Path("data/wikitree_test/seed_profiles.csv")
 DEFAULT_OUTPUT_DIR = Path("data/evaluation")
-DEFAULT_CANDIDATE_MODULE_PATH = Path("candidate_retrieval.py")
-DEFAULT_CONFIDENCE_MODULE_PATH = Path("confidence_scoring.py")
+DEFAULT_CANDIDATE_MODULE_PATH = Path("app/retrieval/candidate_retrieval.py")
+DEFAULT_CONFIDENCE_MODULE_PATH = Path("app/scoring/confidence_scoring.py")
 
 
 SEED_FIGURES: list[dict[str, str | None]] = [
@@ -490,8 +490,8 @@ def main() -> None:
     args = parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
-    candidate_module = load_python_module(args.candidate_module_path, "candidate_retrieval")
-    confidence_module = load_python_module(args.confidence_module_path, "confidence_scoring")
+    candidate_module = load_python_module(args.candidate_module_path, "app/retrieval/candidate_retrieval.py")
+    confidence_module = load_python_module(args.confidence_module_path, "app/scoring/confidence_scoring.py")
 
     if not hasattr(candidate_module, "CandidateRetriever"):
         raise ImportError(f"{args.candidate_module_path} does not define CandidateRetriever")

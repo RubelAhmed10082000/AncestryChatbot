@@ -1,45 +1,8 @@
-"""
-Generate a preliminary family tree from the transformed WikiTree schema dataset.
-
-Inputs expected from transform.py / transform_wikitree_to_schema.py:
-    data/wikitree_schema/person.csv
-    data/wikitree_schema/names.csv
-    data/wikitree_schema/event.csv
-
-Core assumption:
-    Parent-child relationships are stored in event.csv as:
-        Event_Type = father_of or mother_of
-        Person_ID_1 = parent
-        Person_ID_2 = child
-
-Outputs:
-    data/family_trees/<root_wikitree_id>/family_tree_nodes.csv
-    data/family_trees/<root_wikitree_id>/family_tree_edges.csv
-    data/family_trees/<root_wikitree_id>/family_tree.json
-    data/family_trees/<root_wikitree_id>/family_tree.html
-    data/family_trees/<root_wikitree_id>/family_tree_summary.csv
-
-Example:
-    python generate_family_tree.py --wikitree-id Clemens-1 --generations 3
-    python generate_family_tree.py --wikitree-id Austen-489 --generations 3 --include-missing-stubs
-    python generate_family_tree.py --person-id <schema-person-uuid> --generations 2
-
-Notes:
-    - This is a preliminary graph generator for dissertation prototyping.
-    - It does not claim genealogical certainty; it visualises relationships already present
-      in the transformed local dataset.
-    - Use --include-missing-stubs to include placeholder nodes when a relationship references
-      a parent/child that is not present in person.csv. This is useful for showing data gaps.
-"""
-
-from __future__ import annotations
-
 import argparse
 import html
 import json
 from collections import defaultdict, deque
 from pathlib import Path
-from typing import Any
 
 import pandas as pd
 
@@ -53,71 +16,78 @@ EVENT_FILE = "event.csv"
 
 PARENT_EVENT_TYPES = {"father_of", "mother_of", "parent_of"}
 
+BAD_VALUES = {"", "nan", "NaN", "None", "none", "NULL", "null"}
 
-def clean_text(value: Any) -> str | None:
-    """Return stripped text or None for blank/NaN-like values."""
+
+def clean_text(value):
     if value is None:
         return None
+
     try:
         if pd.isna(value):
             return None
     except TypeError:
         pass
+
     text = str(value).strip()
-    if text in {"", "nan", "NaN", "None", "none", "NULL", "null"}:
+    if text in BAD_VALUES:
         return None
+
     return text
 
 
-def read_required_csv(path: Path) -> pd.DataFrame:
+def read_required_csv(path):
     if not path.exists():
         raise FileNotFoundError(f"Missing required file: {path}")
+
     return pd.read_csv(path, dtype=str, keep_default_na=False)
 
 
-def safe_int(value: Any) -> int | None:
+def safe_int(value):
     text = clean_text(value)
     if text is None:
         return None
+
     try:
         return int(float(text))
     except ValueError:
         return None
 
 
-def build_full_name(row: pd.Series) -> str:
-    parts = [
-        clean_text(row.get("First_Name")),
-        clean_text(row.get("Middle_Name")),
-        clean_text(row.get("Last_Name_At_Birth")) or clean_text(row.get("Last_Name_Current")),
-    ]
-    parts = [part for part in parts if part]
+def build_full_name(row):
+    parts = []
+
+    first_name = clean_text(row.get("First_Name"))
+    middle_name = clean_text(row.get("Middle_Name"))
+    last_name = clean_text(row.get("Last_Name_At_Birth")) or clean_text(row.get("Last_Name_Current"))
+
+    for part in [first_name, middle_name, last_name]:
+        if part:
+            parts.append(part)
+
     if parts:
         return " ".join(parts)
+
     return clean_text(row.get("Wikitree_ID")) or clean_text(row.get("Person_ID")) or "Unknown person"
 
 
-def load_schema(schema_dir: Path) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def load_schema(schema_dir):
+    schema_dir = Path(schema_dir)
+
     person = read_required_csv(schema_dir / PERSON_FILE)
     names = read_required_csv(schema_dir / NAMES_FILE)
     event = read_required_csv(schema_dir / EVENT_FILE)
 
-    for col in ["Person_ID", "Wikitree_ID", "Gender", "Profile_URL", "Has_Children"]:
-        if col not in person.columns:
-            person[col] = None
-
-    for col in [
+    person_cols = ["Person_ID", "Wikitree_ID", "Gender", "Profile_URL", "Has_Children"]
+    name_cols = [
         "Person_ID",
         "First_Name",
         "Middle_Name",
         "Last_Name_At_Birth",
         "Last_Name_Current",
         "Nicknames",
-    ]:
-        if col not in names.columns:
-            names[col] = None
-
-    for col in [
+    ]
+    event_cols = [
         "Marriage_ID",
         "Person_ID_1",
         "Person_ID_2",
@@ -126,43 +96,48 @@ def load_schema(schema_dir: Path) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFr
         "Event_Year",
         "Event_Location",
         "Data Status",
-    ]:
+    ]
+
+    for col in person_cols:
+        if col not in person.columns:
+            person[col] = None
+
+    for col in name_cols:
+        if col not in names.columns:
+            names[col] = None
+
+    for col in event_cols:
         if col not in event.columns:
             event[col] = None
 
     return person, names, event
 
 
-def build_people_index(person: pd.DataFrame, names: pd.DataFrame, event: pd.DataFrame) -> pd.DataFrame:
-    """Create one person row with name, birth, death, and profile data."""
+def build_people_index(person, names, event):
     people = person.merge(names, on="Person_ID", how="left", suffixes=("", "_name"))
 
-    birth = (
-        event[event["Event_Type"] == "birth"]
-        .drop_duplicates(subset=["Person_ID_1"], keep="first")
-        .rename(
-            columns={
-                "Person_ID_1": "Person_ID",
-                "Event_Raw_Date": "Birth_Date",
-                "Event_Year": "Birth_Year",
-                "Event_Location": "Birth_Location",
-                "Data Status": "Birth_Data_Status",
-            }
-        )
+    birth = event[event["Event_Type"] == "birth"].copy()
+    birth = birth.drop_duplicates(subset=["Person_ID_1"], keep="first")
+    birth = birth.rename(
+        columns={
+            "Person_ID_1": "Person_ID",
+            "Event_Raw_Date": "Birth_Date",
+            "Event_Year": "Birth_Year",
+            "Event_Location": "Birth_Location",
+            "Data Status": "Birth_Data_Status",
+        }
     )
 
-    death = (
-        event[event["Event_Type"] == "death"]
-        .drop_duplicates(subset=["Person_ID_1"], keep="first")
-        .rename(
-            columns={
-                "Person_ID_1": "Person_ID",
-                "Event_Raw_Date": "Death_Date",
-                "Event_Year": "Death_Year",
-                "Event_Location": "Death_Location",
-                "Data Status": "Death_Data_Status",
-            }
-        )
+    death = event[event["Event_Type"] == "death"].copy()
+    death = death.drop_duplicates(subset=["Person_ID_1"], keep="first")
+    death = death.rename(
+        columns={
+            "Person_ID_1": "Person_ID",
+            "Event_Raw_Date": "Death_Date",
+            "Event_Year": "Death_Year",
+            "Event_Location": "Death_Location",
+            "Data Status": "Death_Data_Status",
+        }
     )
 
     birth_cols = ["Person_ID", "Birth_Date", "Birth_Year", "Birth_Location", "Birth_Data_Status"]
@@ -175,7 +150,7 @@ def build_people_index(person: pd.DataFrame, names: pd.DataFrame, event: pd.Data
     return people
 
 
-def resolve_root_person_id(people: pd.DataFrame, person_id: str | None, wikitree_id: str | None) -> str:
+def resolve_root_person_id(people, person_id, wikitree_id):
     if person_id:
         match = people[people["Person_ID"] == person_id]
         if not match.empty:
@@ -191,7 +166,7 @@ def resolve_root_person_id(people: pd.DataFrame, person_id: str | None, wikitree
     raise ValueError("Provide either --person-id or --wikitree-id.")
 
 
-def build_parent_edges(event: pd.DataFrame) -> pd.DataFrame:
+def build_parent_edges(event):
     edges = event[event["Event_Type"].isin(PARENT_EVENT_TYPES)].copy()
     edges = edges.rename(
         columns={
@@ -202,6 +177,7 @@ def build_parent_edges(event: pd.DataFrame) -> pd.DataFrame:
             "Data Status": "relationship_data_status",
         }
     )
+
     keep_cols = [
         "relationship_event_id",
         "parent_person_id",
@@ -209,34 +185,32 @@ def build_parent_edges(event: pd.DataFrame) -> pd.DataFrame:
         "relationship_type",
         "relationship_data_status",
     ]
+
     for col in keep_cols:
         if col not in edges.columns:
             edges[col] = None
-    return edges[keep_cols].dropna(subset=["parent_person_id", "child_person_id"])
+
+    edges = edges[keep_cols]
+    edges = edges.dropna(subset=["parent_person_id", "child_person_id"])
+
+    return edges
 
 
-def collect_ancestor_subgraph(
-    *,
-    root_person_id: str,
-    people: pd.DataFrame,
-    parent_edges: pd.DataFrame,
-    max_generations: int,
-    include_missing_stubs: bool,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Walk upward from root and collect ancestors up to max_generations."""
-    person_ids_in_people = set(people["Person_ID"].astype(str))
-    parent_lookup: dict[str, list[dict[str, Any]]] = defaultdict(list)
+def collect_ancestor_subgraph(root_person_id, people, parent_edges, max_generations, include_missing_stubs):
+    people_ids = set(people["Person_ID"].astype(str))
+    parent_lookup = defaultdict(list)
 
     for _, edge in parent_edges.iterrows():
         child_id = str(edge["child_person_id"])
         parent_lookup[child_id].append(edge.to_dict())
 
-    visited_depth: dict[str, int] = {root_person_id: 0}
-    output_edges: list[dict[str, Any]] = []
-    queue: deque[tuple[str, int]] = deque([(root_person_id, 0)])
+    visited = {root_person_id: 0}
+    found_edges = []
+    queue = deque([(root_person_id, 0)])
 
     while queue:
         current_id, generation = queue.popleft()
+
         if generation >= max_generations:
             continue
 
@@ -244,37 +218,39 @@ def collect_ancestor_subgraph(
             parent_id = str(edge["parent_person_id"])
             child_id = str(edge["child_person_id"])
 
-            parent_exists = parent_id in person_ids_in_people
-            child_exists = child_id in person_ids_in_people
+            parent_exists = parent_id in people_ids
+            child_exists = child_id in people_ids
 
             if not include_missing_stubs and (not parent_exists or not child_exists):
                 continue
 
-            edge_record = dict(edge)
-            edge_record["parent_exists_in_people"] = parent_exists
-            edge_record["child_exists_in_people"] = child_exists
-            edge_record["parent_generation"] = generation + 1
-            edge_record["child_generation"] = generation
-            output_edges.append(edge_record)
+            new_edge = dict(edge)
+            new_edge["parent_exists_in_people"] = parent_exists
+            new_edge["child_exists_in_people"] = child_exists
+            new_edge["parent_generation"] = generation + 1
+            new_edge["child_generation"] = generation
+            found_edges.append(new_edge)
 
-            if parent_id not in visited_depth or visited_depth[parent_id] > generation + 1:
-                visited_depth[parent_id] = generation + 1
+            if parent_id not in visited or visited[parent_id] > generation + 1:
+                visited[parent_id] = generation + 1
                 if parent_exists:
                     queue.append((parent_id, generation + 1))
 
-    # Build node table.
-    node_rows: list[dict[str, Any]] = []
-    people_by_id = {str(row["Person_ID"]): row for _, row in people.iterrows()}
+    people_by_id = {}
+    for _, row in people.iterrows():
+        people_by_id[str(row["Person_ID"])] = row
 
-    for pid, generation in sorted(visited_depth.items(), key=lambda item: (item[1], item[0])):
-        person_row = people_by_id.get(pid)
+    node_rows = []
+    for person_id, generation in sorted(visited.items(), key=lambda item: (item[1], item[0])):
+        person_row = people_by_id.get(person_id)
 
         if person_row is None:
             if not include_missing_stubs:
                 continue
+
             node_rows.append(
                 {
-                    "person_id": pid,
+                    "person_id": person_id,
                     "wikitree_id": None,
                     "full_name": "Missing linked profile",
                     "generation": generation,
@@ -286,7 +262,7 @@ def collect_ancestor_subgraph(
                     "death_date": None,
                     "death_location": None,
                     "profile_url": None,
-                    "is_root": pid == root_person_id,
+                    "is_root": person_id == root_person_id,
                     "is_stub": True,
                 }
             )
@@ -294,7 +270,7 @@ def collect_ancestor_subgraph(
 
         node_rows.append(
             {
-                "person_id": pid,
+                "person_id": person_id,
                 "wikitree_id": clean_text(person_row.get("Wikitree_ID")),
                 "full_name": clean_text(person_row.get("Full_Name")) or "Unknown person",
                 "generation": generation,
@@ -306,24 +282,23 @@ def collect_ancestor_subgraph(
                 "death_date": clean_text(person_row.get("Death_Date")),
                 "death_location": clean_text(person_row.get("Death_Location")),
                 "profile_url": clean_text(person_row.get("Profile_URL")),
-                "is_root": pid == root_person_id,
+                "is_root": person_id == root_person_id,
                 "is_stub": False,
             }
         )
 
-    nodes_df = pd.DataFrame(node_rows)
-    edges_df = pd.DataFrame(output_edges).drop_duplicates(
-        subset=["parent_person_id", "child_person_id", "relationship_type"], keep="first"
-    )
+    nodes = pd.DataFrame(node_rows)
+    edges = pd.DataFrame(found_edges)
 
-    if not edges_df.empty:
-        edges_df = edges_df[edges_df["parent_person_id"].isin(nodes_df["person_id"]) & edges_df["child_person_id"].isin(nodes_df["person_id"])]
+    if not edges.empty:
+        edges = edges.drop_duplicates(subset=["parent_person_id", "child_person_id", "relationship_type"], keep="first")
+        edges = edges[edges["parent_person_id"].isin(nodes["person_id"])]
+        edges = edges[edges["child_person_id"].isin(nodes["person_id"])]
 
-    return nodes_df.reset_index(drop=True), edges_df.reset_index(drop=True)
+    return nodes.reset_index(drop=True), edges.reset_index(drop=True)
 
 
-def summarise_tree(nodes: pd.DataFrame, edges: pd.DataFrame) -> pd.DataFrame:
-    generation_counts = nodes["generation"].value_counts().sort_index().to_dict() if not nodes.empty else {}
+def summarise_tree(nodes, edges):
     rows = [
         {"metric": "node_count", "value": len(nodes)},
         {"metric": "edge_count", "value": len(edges)},
@@ -333,27 +308,29 @@ def summarise_tree(nodes: pd.DataFrame, edges: pd.DataFrame) -> pd.DataFrame:
         {"metric": "mother_edges", "value": int((edges["relationship_type"] == "mother_of").sum()) if not edges.empty else 0},
     ]
 
-    for generation, count in generation_counts.items():
-        rows.append({"metric": f"generation_{generation}_nodes", "value": int(count)})
+    if not nodes.empty:
+        generation_counts = nodes["generation"].value_counts().sort_index().to_dict()
+        for generation, count in generation_counts.items():
+            rows.append({"metric": f"generation_{generation}_nodes", "value": int(count)})
 
     return pd.DataFrame(rows)
 
 
-def tree_to_json(nodes: pd.DataFrame, edges: pd.DataFrame) -> dict[str, Any]:
+def tree_to_json(nodes, edges):
     return {
         "nodes": nodes.to_dict(orient="records"),
         "edges": edges.to_dict(orient="records"),
     }
 
 
-def html_escape(value: Any) -> str:
+def html_escape(value):
     text = "" if value is None else str(value)
     return html.escape(text)
 
 
-def node_label(row: pd.Series) -> str:
+def node_label(row):
     name = clean_text(row.get("full_name")) or "Unknown person"
-    wt = clean_text(row.get("wikitree_id"))
+    wikitree_id = clean_text(row.get("wikitree_id"))
     birth_year = clean_text(row.get("birth_year"))
     death_year = clean_text(row.get("death_year"))
 
@@ -361,18 +338,24 @@ def node_label(row: pd.Series) -> str:
     if birth_year or death_year:
         dates = f" ({birth_year or '?'}–{death_year or '?'})"
 
-    return f"{name}{dates}" + (f"\n{wt}" if wt else "")
+    label = name + dates
+    if wikitree_id:
+        label += f"\n{wikitree_id}"
+
+    return label
 
 
-def generate_html(nodes: pd.DataFrame, edges: pd.DataFrame, root_label: str, output_path: Path) -> None:
-    """Generate a self-contained static SVG HTML family tree."""
+def generate_html(nodes, edges, root_label, output_path):
+    output_path = Path(output_path)
+
     if nodes.empty:
         output_path.write_text("<html><body><h1>No tree data found</h1></body></html>", encoding="utf-8")
         return
 
-    # Layout: generations as columns, nodes within generation stacked vertically.
-    generation_groups: dict[int, list[str]] = defaultdict(list)
-    for _, row in nodes.sort_values(by=["generation", "full_name"]).iterrows():
+    generation_groups = defaultdict(list)
+    sorted_nodes = nodes.sort_values(by=["generation", "full_name"])
+
+    for _, row in sorted_nodes.iterrows():
         generation_groups[int(row["generation"])].append(row["person_id"])
 
     x_gap = 330
@@ -382,62 +365,55 @@ def generate_html(nodes: pd.DataFrame, edges: pd.DataFrame, root_label: str, out
     margin_x = 60
     margin_y = 70
 
-    positions: dict[str, tuple[int, int]] = {}
+    positions = {}
     max_rows = max(len(ids) for ids in generation_groups.values())
     max_generation = max(generation_groups.keys())
 
     for generation, ids in generation_groups.items():
-        total_height = (len(ids) - 1) * y_gap
         start_y = margin_y + max(0, (max_rows - len(ids)) * y_gap // 2)
-        for idx, person_id in enumerate(ids):
+        for index, person_id in enumerate(ids):
             x = margin_x + generation * x_gap
-            y = start_y + idx * y_gap
+            y = start_y + index * y_gap
             positions[person_id] = (x, y)
 
     width = margin_x * 2 + (max_generation + 1) * x_gap + box_w
     height = margin_y * 2 + max_rows * y_gap + box_h
 
-    nodes_by_id = {row["person_id"]: row for _, row in nodes.iterrows()}
+    nodes_by_id = {}
+    for _, row in nodes.iterrows():
+        nodes_by_id[row["person_id"]] = row
 
     edge_svg = []
     for _, edge in edges.iterrows():
         parent = str(edge["parent_person_id"])
         child = str(edge["child_person_id"])
+
         if parent not in positions or child not in positions:
             continue
+
         px, py = positions[parent]
         cx, cy = positions[child]
-        # Parent is to the right of child in ancestor tree.
-        x1 = px
-        y1 = py + box_h / 2
-        x2 = cx + box_w
-        y2 = cy + box_h / 2
         rel = clean_text(edge.get("relationship_type")) or "parent_of"
-        stroke_dasharray = "" if rel == "father_of" else " stroke-dasharray='6 4'"
+        dash = "" if rel == "father_of" else " stroke-dasharray='6 4'"
+
         edge_svg.append(
-            f"<line x1='{x1}' y1='{y1}' x2='{x2}' y2='{y2}' class='edge'{stroke_dasharray} />"
+            f"<line x1='{px}' y1='{py + box_h / 2}' x2='{cx + box_w}' y2='{cy + box_h / 2}' class='edge'{dash} />"
         )
 
     node_svg = []
-    for person_id, (x, y) in positions.items():
+    for person_id, position in positions.items():
+        x, y = position
         row = nodes_by_id[person_id]
+
         is_root = bool(row.get("is_root"))
         is_stub = bool(row.get("is_stub"))
         gender = clean_text(row.get("gender")) or "Unknown"
         css_class = "node root" if is_root else "node stub" if is_stub else "node"
+        profile_url = clean_text(row.get("profile_url"))
         label_lines = node_label(row).split("\n")
         title = html_escape(
             f"{row.get('full_name')} | {row.get('wikitree_id')} | Born: {row.get('birth_date')} | Died: {row.get('death_date')}"
         )
-        profile_url = clean_text(row.get("profile_url"))
-
-        text_lines = []
-        for i, line in enumerate(label_lines[:3]):
-            font_size = 13 if i == 0 else 11
-            dy = 22 + i * 18
-            text_lines.append(
-                f"<text x='{x + 12}' y='{y + dy}' font-size='{font_size}'>{html_escape(line)}</text>"
-            )
 
         if profile_url:
             node_svg.append(f"<a href='{html_escape(profile_url)}' target='_blank'>")
@@ -445,8 +421,17 @@ def generate_html(nodes: pd.DataFrame, edges: pd.DataFrame, root_label: str, out
         node_svg.append(f"<g class='{css_class}'>")
         node_svg.append(f"<title>{title}</title>")
         node_svg.append(f"<rect x='{x}' y='{y}' width='{box_w}' height='{box_h}' rx='10' />")
-        node_svg.extend(text_lines)
-        node_svg.append(f"<text x='{x + 12}' y='{y + box_h - 10}' font-size='10' class='meta'>{html_escape(gender)}</text>")
+
+        for line_index, line in enumerate(label_lines[:3]):
+            font_size = 13 if line_index == 0 else 11
+            dy = 22 + line_index * 18
+            node_svg.append(
+                f"<text x='{x + 12}' y='{y + dy}' font-size='{font_size}'>{html_escape(line)}</text>"
+            )
+
+        node_svg.append(
+            f"<text x='{x + 12}' y='{y + box_h - 10}' font-size='10' class='meta'>{html_escape(gender)}</text>"
+        )
         node_svg.append("</g>")
 
         if profile_url:
@@ -502,27 +487,28 @@ def generate_html(nodes: pd.DataFrame, edges: pd.DataFrame, root_label: str, out
 </body>
 </html>
 """
+
     output_path.write_text(html_doc, encoding="utf-8")
 
 
-def build_output_dir(base_output_dir: Path, root_wikitree_id: str | None, root_person_id: str) -> Path:
+def build_output_dir(base_output_dir, root_wikitree_id, root_person_id):
     folder_name = root_wikitree_id or root_person_id
     safe_name = "".join(ch if ch.isalnum() or ch in {"-", "_"} else "_" for ch in folder_name)
-    return base_output_dir / safe_name
+    return Path(base_output_dir) / safe_name
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args():
     parser = argparse.ArgumentParser(description="Generate a preliminary family tree from transformed WikiTree schema CSVs.")
-    parser.add_argument("--schema-dir", type=Path, default=DEFAULT_SCHEMA_DIR, help="Directory containing person.csv, names.csv, event.csv.")
-    parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR, help="Base output directory for generated family trees.")
-    parser.add_argument("--wikitree-id", type=str, default=None, help="Root WikiTree ID, e.g. Clemens-1.")
-    parser.add_argument("--person-id", type=str, default=None, help="Root internal schema Person_ID UUID.")
-    parser.add_argument("--generations", type=int, default=3, help="Number of ancestor generations to include.")
-    parser.add_argument("--include-missing-stubs", action="store_true", help="Include placeholder nodes for missing linked people.")
+    parser.add_argument("--schema-dir", type=Path, default=DEFAULT_SCHEMA_DIR)
+    parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
+    parser.add_argument("--wikitree-id", type=str, default=None)
+    parser.add_argument("--person-id", type=str, default=None)
+    parser.add_argument("--generations", type=int, default=3)
+    parser.add_argument("--include-missing-stubs", action="store_true")
     return parser.parse_args()
 
 
-def main() -> None:
+def main():
     args = parse_args()
 
     if args.generations < 0:

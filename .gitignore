@@ -1,15 +1,4 @@
 .vscode
 data
-.venv/
-__pycache__/
-*.pyc
-.env
-.vscode/
-.ipynb_checkpoints/
-
-data/raw/
-data/family_trees/
-data/evaluation/
-
-*.log
-.DS_Store
+__pycache__
+data/wikitree_test/people.csv

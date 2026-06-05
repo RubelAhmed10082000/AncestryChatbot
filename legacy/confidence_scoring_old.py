@@ -1,33 +1,5 @@
-"""
-Confidence scoring layer for candidate_retrieval.py.
 
-Purpose:
-    Convert deterministic retrieval scores into interpretable confidence values,
-    confidence bands, and human-readable explanations.
-
-Inputs expected:
-    data/wikitree_schema/person.csv
-    data/wikitree_schema/names.csv
-    data/wikitree_schema/event.csv
-
-Requires:
-    candidate_retrieval.py in the same directory, or pass --candidate-module-path.
-
-Example:
-    python confidence_scoring.py \
-        --first-name Jane \
-        --last-name Austen \
-        --birth-year 1775 \
-        --birth-location Hampshire \
-        --top-k 5
-
-Save output:
-    python confidence_scoring.py \
-        --first-name Samuel \
-        --last-name Clemens \
-        --birth-year 1835 \
-        --output data/results/clemens_confidence.csv
-"""
+""""
 
 from __future__ import annotations
 
@@ -42,16 +14,11 @@ import pandas as pd
 
 
 DEFAULT_SCHEMA_DIR = Path("data/wikitree_schema")
-DEFAULT_CANDIDATE_MODULE_PATH = Path("candidate_retrieval.py")
+DEFAULT_CANDIDATE_MODULE_PATH = Path("retrieval/candidate_retrieval.py")
 
 
-# -----------------------------------------------------------------------------
-# Confidence scoring helpers
-# -----------------------------------------------------------------------------
 
-
-def safe_float(value: Any) -> float | None:
-    """Convert a value to float, returning None for missing/invalid values."""
+def safe_float(value):
     if value is None:
         return None
     try:
@@ -66,13 +33,7 @@ def safe_float(value: Any) -> float | None:
 
 
 
-def evidence_coverage(row: pd.Series) -> float:
-    """
-    Estimate how many useful fields contributed evidence.
-
-    Returns a 0-1 score based on available component scores.
-    Missing scores are ignored as unavailable evidence.
-    """
+def evidence_coverage(row):
     evidence_fields = [
         "first_name_score",
         "last_name_score",
@@ -99,8 +60,7 @@ def evidence_coverage(row: pd.Series) -> float:
 
 
 
-def temporal_quality(row: pd.Series) -> str:
-    """Summarise birth-year match quality."""
+def temporal_quality(row):
     score = safe_float(row.get("birth_year_score"))
 
     if score is None:
@@ -115,8 +75,7 @@ def temporal_quality(row: pd.Series) -> str:
 
 
 
-def name_quality(row: pd.Series) -> str:
-    """Summarise name match quality."""
+def name_quality(row):
     first = safe_float(row.get("first_name_score")) or 0.0
     last = safe_float(row.get("last_name_score")) or 0.0
 
@@ -132,13 +91,7 @@ def name_quality(row: pd.Series) -> str:
 
 
 
-def ambiguity_penalty(row: pd.Series, candidates: pd.DataFrame) -> float:
-    """
-    Penalise confidence when top candidates are very close together.
-
-    If rank 1 and rank 2 have similar scores, the system should be less confident.
-    Returns a 0-15 penalty.
-    """
+def ambiguity_penalty(row, candidates):
     rank = safe_float(row.get("rank"))
     if rank != 1 or len(candidates) < 2:
         return 0.0
@@ -157,16 +110,7 @@ def ambiguity_penalty(row: pd.Series, candidates: pd.DataFrame) -> float:
 
 
 
-def calculate_confidence_score(row: pd.Series, candidates: pd.DataFrame) -> float:
-    """
-    Convert rank_score and evidence quality into a calibrated 0-100 confidence score.
-
-    This is deliberately explainable:
-    - Starts from retrieval rank_score.
-    - Adds small boosts for strong evidence coverage.
-    - Penalises ambiguous top results.
-    - Penalises weak name/date evidence.
-    """
+def calculate_confidence_score(row, candidates):
     base_score = safe_float(row.get("rank_score")) or 0.0
     confidence = base_score
 
@@ -180,13 +124,11 @@ def calculate_confidence_score(row: pd.Series, candidates: pd.DataFrame) -> floa
     last_name_score = safe_float(row.get("last_name_score"))
     birth_year_score = safe_float(row.get("birth_year_score"))
 
-    # Identity matching should not be high-confidence with weak names.
     if first_name_score is not None and first_name_score < 0.6:
         confidence -= 15
     if last_name_score is not None and last_name_score < 0.6:
         confidence -= 15
 
-    # Missing or mismatched date should reduce confidence when date was part of retrieval.
     if birth_year_score is not None:
         if birth_year_score == 0:
             confidence -= 10
@@ -199,8 +141,7 @@ def calculate_confidence_score(row: pd.Series, candidates: pd.DataFrame) -> floa
 
 
 
-def confidence_band(confidence_score: float) -> str:
-    """Map numeric confidence score to a user-facing band."""
+def confidence_band(confidence_score):
     if confidence_score >= 90:
         return "High"
     if confidence_score >= 70:
@@ -211,8 +152,7 @@ def confidence_band(confidence_score: float) -> str:
 
 
 
-def confidence_interpretation(confidence_score: float) -> str:
-    """Short explanation of what the confidence band means."""
+def confidence_interpretation(confidence_score):
     band = confidence_band(confidence_score)
 
     if band == "High":
@@ -225,8 +165,7 @@ def confidence_interpretation(confidence_score: float) -> str:
 
 
 
-def build_confidence_explanation(row: pd.Series) -> str:
-    """Create a concise, human-readable explanation."""
+def build_confidence_explanation(row):
     parts = [name_quality(row), temporal_quality(row)]
 
     location_score = safe_float(row.get("birth_location_score"))
@@ -249,8 +188,7 @@ def build_confidence_explanation(row: pd.Series) -> str:
 
 
 
-def add_confidence_scores(candidates: pd.DataFrame) -> pd.DataFrame:
-    """Add confidence_score, confidence_band, and confidence_explanation columns."""
+def add_confidence_scores(candidates):
     if candidates.empty:
         return candidates
 
@@ -265,7 +203,6 @@ def add_confidence_scores(candidates: pd.DataFrame) -> pd.DataFrame:
     df["confidence_interpretation"] = df["confidence_score"].apply(confidence_interpretation)
     df["confidence_explanation"] = df.apply(build_confidence_explanation, axis=1)
 
-    # Put confidence fields near the front.
     front_cols = [
         "rank",
         "rank_score",
@@ -283,13 +220,7 @@ def add_confidence_scores(candidates: pd.DataFrame) -> pd.DataFrame:
     return df[front_cols + remaining_cols]
 
 
-# -----------------------------------------------------------------------------
-# Candidate retriever loading
-# -----------------------------------------------------------------------------
-
-
 def load_candidate_retriever(module_path: Path):
-    """Dynamically import CandidateRetriever from candidate_retrieval.py."""
     module_path = module_path.resolve()
     if not module_path.exists():
         raise FileNotFoundError(
@@ -311,12 +242,7 @@ def load_candidate_retriever(module_path: Path):
     return module.CandidateRetriever
 
 
-# -----------------------------------------------------------------------------
-# CLI
-# -----------------------------------------------------------------------------
-
-
-def parse_args() -> argparse.Namespace:
+def parse_args():
     parser = argparse.ArgumentParser(description="Retrieve candidates and add confidence scores.")
 
     parser.add_argument("--schema-dir", type=Path, default=DEFAULT_SCHEMA_DIR)
@@ -334,7 +260,7 @@ def parse_args() -> argparse.Namespace:
 
 
 
-def main() -> None:
+def main():
     args = parse_args()
 
     CandidateRetriever = load_candidate_retriever(args.candidate_module_path)
@@ -378,3 +304,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+"""

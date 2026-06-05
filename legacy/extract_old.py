@@ -1,24 +1,8 @@
 """
-Build a small WikiTree test dataset for ancestry candidate retrieval.
-
-Outputs:
-- data/wikitree_test/raw_search_results.json
-- data/wikitree_test/raw_ancestor_results.json
-- data/wikitree_test/seed_profiles.csv
-- data/wikitree_test/people.csv
-- data/wikitree_test/relationships.csv
-
-Install:
-    pip install requests pandas
-"""
-
-from __future__ import annotations
 
 import json
 import time
 from pathlib import Path
-from typing import Any
-
 import pandas as pd
 import requests
 
@@ -27,13 +11,12 @@ BASE_URL = "https://api.wikitree.com/api.php"
 APP_ID = "AncestryChatbotMSc"
 
 OUTPUT_DIR = Path("data/wikitree_test")
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 ANCESTOR_DEPTH = 3
 REQUEST_DELAY_SECONDS = 1.0
 
 
-SEED_FIGURES = [
+TEST_FIGURES = [
     {
         "label": "Samuel Langhorne Clemens / Mark Twain",
         "first_name": "Samuel",
@@ -120,10 +103,8 @@ FIELDS = ",".join(
 )
 
 
-def call_wikitree(params: dict[str, Any]) -> Any:
-    """
-    Calls WikiTree API and returns JSON.
-    """
+def call_wikitree_api(params):
+
     params = dict(params)
     params["appId"] = APP_ID
 
@@ -132,10 +113,7 @@ def call_wikitree(params: dict[str, Any]) -> Any:
     return response.json()
 
 
-def search_person(seed: dict[str, str]) -> Any:
-    """
-    Search for a person using WikiTree searchPerson.
-    """
+def search_person(seed):
     params = {
         "action": "searchPerson",
         "FirstName": seed["first_name"],
@@ -147,14 +125,12 @@ def search_person(seed: dict[str, str]) -> Any:
     if seed.get("birth_date"):
         params["BirthDate"] = seed["birth_date"]
 
-    return call_wikitree(params)
+    return call_wikitree_api(params)
 
 
-def get_ancestors(profile_key: str, depth: int = ANCESTOR_DEPTH) -> Any:
-    """
-    Pull ancestors for one profile key.
-    """
-    return call_wikitree(
+def get_ancestors(profile_key, depth: int = ANCESTOR_DEPTH):
+
+    return call_wikitree_api(
         {
             "action": "getAncestors",
             "key": profile_key,
@@ -165,13 +141,11 @@ def get_ancestors(profile_key: str, depth: int = ANCESTOR_DEPTH) -> Any:
     )
 
 
-def flatten_api_profiles(api_response: Any) -> list[dict[str, Any]]:
-    """
-    Defensive parser for different WikiTree response shapes.
-    """
-    profiles: list[dict[str, Any]] = []
+def flatten_api_profiles(api_response):
 
-    def add_profile(obj: Any) -> None:
+    profiles = []
+
+    def add_profile(obj):
         if isinstance(obj, dict):
             if "Id" in obj or "Name" in obj:
                 profiles.append(obj)
@@ -190,7 +164,6 @@ def flatten_api_profiles(api_response: Any) -> list[dict[str, Any]]:
                     for ancestor in item["ancestors"]:
                         add_profile(ancestor)
 
-                # Some responses may directly contain numeric/profile-like keys
                 add_profile(item)
 
     elif isinstance(api_response, dict):
@@ -210,15 +183,7 @@ def flatten_api_profiles(api_response: Any) -> list[dict[str, Any]]:
     return profiles
 
 
-def choose_best_search_match(seed: dict[str, str], search_response: Any) -> dict[str, Any] | None:
-    """
-    Pick the best result from searchPerson.
-
-    Simple logic:
-    - If a known WikiTree ID is supplied, use that directly.
-    - Otherwise, prefer exact birth date match.
-    - Otherwise, choose the first returned match.
-    """
+def choose_best_search_match(seed, search_response):
     if seed.get("known_wikitree_id"):
         return {
             "Name": seed["known_wikitree_id"],
@@ -246,10 +211,8 @@ def choose_best_search_match(seed: dict[str, str], search_response: Any) -> dict
     return best
 
 
-def normalise_person(profile: dict[str, Any]) -> dict[str, Any]:
-    """
-    Convert raw WikiTree profile into a cleaner person record.
-    """
+def normalise_person(profile) :
+
     return {
         "person_id": profile.get("Id"),
         "wikitree_id": profile.get("Name"),
@@ -271,10 +234,7 @@ def normalise_person(profile: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def extract_relationships(profile: dict[str, Any]) -> list[dict[str, Any]]:
-    """
-    Create parent-child relationship rows from Father and Mother fields.
-    """
+def extract_relationships(profile):
     relationships = []
 
     child_id = profile.get("Id")
@@ -306,22 +266,22 @@ def extract_relationships(profile: dict[str, Any]) -> list[dict[str, Any]]:
     return relationships
 
 
-def main() -> None:
-    raw_search_results: dict[str, Any] = {}
-    raw_ancestor_results: dict[str, Any] = {}
+def main():
+    raw_search_results = {}
+    raw_ancestor_results = {}
 
-    selected_seeds: list[dict[str, Any]] = []
-    all_people_by_wikitree_id: dict[str, dict[str, Any]] = {}
-    all_relationships: list[dict[str, Any]] = []
+    selected_seeds = []
+    all_people_by_wikitree_id = {}
+    all_relationships = []
 
-    for seed in SEED_FIGURES:
-        label = seed["label"]
+    for figures in TEST_FIGURES:
+        label = figures["label"]
         print(f"\nSearching seed: {label}")
 
-        search_response = search_person(seed)
+        search_response = search_person(figures)
         raw_search_results[label] = search_response
 
-        selected = choose_best_search_match(seed, search_response)
+        selected = choose_best_search_match(figures, search_response)
 
         if not selected:
             print(f"  No match found for {label}")
@@ -330,10 +290,10 @@ def main() -> None:
         profile_key = selected.get("Name")
 
         if not profile_key:
-            print(f"  Match found but no WikiTree Name/key for {label}")
+            print(f"Match found but no WikiTree Name/key for {label}")
             continue
 
-        print(f"  Selected WikiTree profile: {profile_key}")
+        print(f" Selected WikiTree profile: {profile_key}")
 
         selected_seeds.append(
             {
@@ -356,7 +316,6 @@ def main() -> None:
 
         profiles = flatten_api_profiles(ancestor_response)
 
-        # Also include the selected seed profile if available
         if selected.get("Id") or selected.get("FirstName") or selected.get("BirthDate"):
             profiles.append(selected)
 
@@ -382,7 +341,6 @@ def main() -> None:
 
         time.sleep(REQUEST_DELAY_SECONDS)
 
-    # Deduplicate relationships
     relationship_df = pd.DataFrame(all_relationships)
     if not relationship_df.empty:
         relationship_df = relationship_df.drop_duplicates()
@@ -409,3 +367,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+"""
