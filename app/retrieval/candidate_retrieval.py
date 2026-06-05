@@ -3,7 +3,6 @@ import math
 import re
 from difflib import SequenceMatcher
 from pathlib import Path
-
 import pandas as pd
 
 
@@ -17,6 +16,7 @@ UNKNOWN_VALUES = {
     "Unknown", "unknown", "UNKNOWN",
 }
 
+# Weigths given to attibutes if they are a match
 DEFAULT_WEIGHTS = {
     "first_name_score": 0.25,
     "last_name_score": 0.25,
@@ -25,6 +25,7 @@ DEFAULT_WEIGHTS = {
     "gender_score": 0.05,
 }
 
+# Final columns to be displayed 
 DISPLAY_COLUMNS = [
     "rank",
     "rank_score",
@@ -38,6 +39,9 @@ DISPLAY_COLUMNS = [
 
 
 class CandidateRetriever:
+    """
+    
+    """
     DEFAULT_WEIGHTS = DEFAULT_WEIGHTS
 
     def __init__(self, schema_dir=DEFAULT_SCHEMA_DIR, weights=None):
@@ -58,6 +62,7 @@ class CandidateRetriever:
         return pd.read_csv(path, dtype=str, keep_default_na=False)
 
     def _build_search_index(self):
+
         people = self.person_df.copy()
         names = self.names_df.copy()
         events = self.event_df.copy()
@@ -138,12 +143,22 @@ class CandidateRetriever:
 
         return people
 
-    def _build_full_name(self, row):
+    def _build_full_name(self, row: list) -> list | None:
+        """
+        Combines first, middle and last names
+        Args -
+            row (list): list of names
+        Returns -
+            list: list of full names
+        """
+        # Cleaning each name 
         parts = [
             clean_text(row.get("First_Name")),
             clean_text(row.get("Middle_Name")),
             clean_text(row.get("Last_Name_At_Birth")) or clean_text(row.get("Last_Name_Current")),
         ]
+
+        # Adding names to the list
         parts = [part for part in parts if part]
 
         if parts:
@@ -161,8 +176,13 @@ class CandidateRetriever:
         top_k=5,
         min_score=0.0,
     ):
+        """
+        Matches candidates based on attribute similarity
+
+        """
         rows = []
 
+        # matching candidates based on similarity of attributes
         for _, candidate in self.index_df.iterrows():
             scores = {
                 "first_name_score": best_string_similarity(first_name, [candidate.get("First_Name")]),
@@ -175,12 +195,13 @@ class CandidateRetriever:
                 "gender_score": gender_similarity(gender, candidate.get("Gender")),
             }
 
+            # creating scoring scoring weights
             rank_score = weighted_score(scores, self.weights)
             rank_score = adjust_score(rank_score, scores, birth_year, candidate.get("Birth_Year"))
 
             if rank_score < min_score:
                 continue
-
+            # Appending scores along with information
             rows.append(
                 {
                     "rank_score": rank_score,
