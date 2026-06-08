@@ -4,7 +4,7 @@ import re
 from difflib import SequenceMatcher
 from pathlib import Path
 import pandas as pd
-
+from typing import Any
 
 DEFAULT_SCHEMA_DIR = Path("data/wikitree_schema")
 PERSON_FILE = "person.csv"
@@ -16,7 +16,7 @@ UNKNOWN_VALUES = {
     "Unknown", "unknown", "UNKNOWN",
 }
 
-# Weigths given to attibutes if they are a match
+# Weights given to attibutes if they are a match
 DEFAULT_WEIGHTS = {
     "first_name_score": 0.25,
     "last_name_score": 0.25,
@@ -40,7 +40,7 @@ DISPLAY_COLUMNS = [
 
 class CandidateRetriever:
     """
-    
+    Class used to retrieve candidates from database based on matched paramters
     """
     DEFAULT_WEIGHTS = DEFAULT_WEIGHTS
 
@@ -62,10 +62,15 @@ class CandidateRetriever:
         return pd.read_csv(path, dtype=str, keep_default_na=False)
 
     def _build_search_index(self):
-
+        """
+        Creates pandas dataframe with people, name and event data
+        Return - 
+            pandas dataframe: merged dataframe with people, name and events
+        """
         people = self.person_df.copy()
         names = self.names_df.copy()
         events = self.event_df.copy()
+        
 
         for col in ["Person_ID", "Wikitree_ID", "Gender", "Profile_URL", "Has_Children"]:
             if col not in people.columns:
@@ -94,8 +99,10 @@ class CandidateRetriever:
             if col not in events.columns:
                 events[col] = None
 
+        # Merging people and names dataframe
         people = people.merge(names, on="Person_ID", how="left", suffixes=("", "_name"))
 
+        # Cleaning birth events
         birth_events = events[events["Event_Type"] == "birth"].copy()
         birth_events = birth_events.sort_values(by=["Person_ID_1", "Event_Year"], na_position="last")
         birth_events = birth_events.drop_duplicates(subset=["Person_ID_1"], keep="first")
@@ -109,6 +116,7 @@ class CandidateRetriever:
             }
         )
 
+        # Cleaning death events
         death_events = events[events["Event_Type"] == "death"].copy()
         death_events = death_events.sort_values(by=["Person_ID_1", "Event_Year"], na_position="last")
         death_events = death_events.drop_duplicates(subset=["Person_ID_1"], keep="first")
@@ -137,6 +145,7 @@ class CandidateRetriever:
             "Death_Data_Status",
         ]
 
+        # Merging people dataframe with death and birth
         people = people.merge(birth_events[birth_cols], on="Person_ID", how="left")
         people = people.merge(death_events[death_cols], on="Person_ID", how="left")
         people["Full_Name"] = people.apply(self._build_full_name, axis=1)
@@ -197,7 +206,8 @@ class CandidateRetriever:
 
             # creating scoring scoring weights
             rank_score = weighted_score(scores, self.weights)
-            rank_score = adjust_score(rank_score, scores, birth_year, candidate.get("Birth_Year"))
+            rank_score = adjust_score(rank_score, scores, birth_year, candidate.get("Birth_Year"), 
+                                      birth_location, candidate.get("Birth_Location"))
 
             if rank_score < min_score:
                 continue
@@ -249,7 +259,10 @@ class CandidateRetriever:
         return results.head(top_k)
 
 
-def clean_text(value):
+def clean_text(value: str) -> str:
+    """
+    Cleans text
+    """
     if value is None:
         return None
 
@@ -268,7 +281,10 @@ def clean_text(value):
     return text or None
 
 
-def normalise_for_matching(value):
+def normalise_for_matching(value: str) -> str:
+    """
+    standardizes text for matching
+    """
     text = clean_text(value)
 
     if text is None:
@@ -281,7 +297,10 @@ def normalise_for_matching(value):
     return text
 
 
-def token_set(value):
+def token_set(value: str) -> set:
+    """
+    Splits text into tokens
+    """
     text = normalise_for_matching(value)
 
     if not text:
@@ -290,7 +309,15 @@ def token_set(value):
     return set(text.split())
 
 
-def sequence_similarity(left, right):
+def sequence_similarity(left: str, right: str) -> SequenceMatcher:
+    """
+    Compares string similarity of two pieces of text and returns similarity ratio
+    Args - 
+        left (str): left string - compared to right 
+        right (str): right string - compared to left
+    Returns - 
+        SequencetMatcher: ratio of similarity between left and right
+    """
     left = normalise_for_matching(left)
     right = normalise_for_matching(right)
 
@@ -300,20 +327,30 @@ def sequence_similarity(left, right):
     return SequenceMatcher(None, left, right).ratio()
 
 
-def token_overlap_similarity(left, right):
+def token_overlap_similarity(left: str, right: str) -> float:
     left_tokens = token_set(left)
     right_tokens = token_set(right)
 
     if not left_tokens or not right_tokens:
         return 0.0
 
-    return len(left_tokens & right_tokens) / len(left_tokens | right_tokens)
+    return len(left_tokens and right_tokens) / len(left_tokens or right_tokens)
 
 
-def best_string_similarity(query_value, candidate_values):
+def best_string_similarity(query_value: str, candidate_values: dict) -> int:
+    """
+    Returns the highest similarity score between two strings
+    Args - 
+        query value (str): canonical string
+        candidate_value (dict): string that will be comapred to query value for similarity 
+    Returns -
+        int: Maximum score 
+    """
+
     if clean_text(query_value) is None:
         return math.nan
 
+    # Appending scores returned by sequence_similiarty() to scores
     scores = []
     for value in candidate_values:
         if clean_text(value):
@@ -325,20 +362,40 @@ def best_string_similarity(query_value, candidate_values):
     return max(scores)
 
 
-def best_location_similarity(query_location, candidate_location):
+def best_location_similarity(query_location: str, candidate_location: str) -> float:
+    """
+    Compares string similiarity of locations between query and candidate
+    Args -
+        query_location(str): location used in query 
+            query originates from user but is converted by LLM layer 
+        candidate_location(str): location(s) retrieved by LLM and compared to query 
+    Returns -
+        Int: similarity score between candidate and query locations strings
+    """
     if clean_text(query_location) is None:
         return math.nan
 
     if clean_text(candidate_location) is None:
         return 0.0
 
+    # Calculating overlap and string similarities between query and candidation location strings
+    # token_overlap_similarity() used to account for place name spelling variations 
     char_score = sequence_similarity(query_location, candidate_location)
     token_score = token_overlap_similarity(query_location, candidate_location)
 
     return max(char_score, token_score)
 
 
-def year_similarity(query_year, candidate_year, max_difference=20):
+def year_similarity(query_year: int, candidate_year: int, max_difference: int=20) -> float:
+    """
+    Compares similarity in year between candidate and query year 
+    Args - 
+        query_year (int): year used in retrieval 
+        candidate_year (int): year(s) of event that is compared to the query year 
+        max_difference (int): buffer, in years, where match can still be valid
+    Returns -
+        float: difference between candidate and query years
+    """
     if query_year is None:
         return math.nan
 
@@ -362,7 +419,15 @@ def year_similarity(query_year, candidate_year, max_difference=20):
     return 1.0 - (diff / max_difference)
 
 
-def gender_similarity(query_gender, candidate_gender):
+def gender_similarity(query_gender: str, candidate_gender: str) -> float:
+    """
+    Determines if gender of query is the same as candidate
+    Args -
+        query_gender(str): gender used in retrieval
+        candidate_gender(str): gender of candidate profile
+    Returns -
+        float: 1.0 == genders are matched, 0.0 means they are unmatched 
+    """
     query = clean_text(query_gender)
 
     if query is None:
@@ -373,13 +438,26 @@ def gender_similarity(query_gender, candidate_gender):
     if candidate is None:
         return 0.0
 
+    # All the retrieval module needs to ascertain is if the genders are the same or not
+    # If not the system will look elsewhere - a candidate with a different gender from the query
+    # Becomes excluded. This will be talked about more in Chapter 3: Methodology
     return 1.0 if query.lower()[0] == candidate.lower()[0] else 0.0
 
 
-def weighted_score(scores, weights):
+def weighted_score(scores: dict, weights: dict) -> float:
+    """
+    Calculates weighed score for a particular candidate profile field
+    Args -
+        scores(dict): Similairty scores for each candidate profile attributes
+        weights(dict): weigth value given to each profile attribute
+    Returns
+        float: weighted score of candidate profile attribute
+    """
     numerator = 0.0
     denominator = 0.0
 
+    # Calculating and returning weights for each column attribute for a candidate profile
+    # Testing and validating different weight metrics will be discussed further in Chapter 3: Methodology
     for col, weight in weights.items():
         score = scores.get(col, math.nan)
 
@@ -391,7 +469,7 @@ def weighted_score(scores, weights):
                 continue
         except TypeError:
             continue
-
+        
         numerator += score * weight
         denominator += weight
 
@@ -401,11 +479,27 @@ def weighted_score(scores, weights):
     return round((numerator / denominator) * 100, 2)
 
 
-def adjust_score(score, scores, query_birth_year, candidate_birth_year):
+def adjust_score(score: float, scores: dict, query_birth_year: Any, candidate_birth_year: Any, 
+                 query_birth_location: str, candidate_birth_location: str) -> float:
+
+    """
+    Adjusts scoring for candidate profile based on similarity scores of particular attributes
+    Args -
+        score(float): total score of candidate profile
+        scores(dict): scores for every attribute of candidate profile
+        query_birth_year(any): birth year used in retrieval
+        candidate_birth_year(any): birth year of candidate profile
+    Returns - 
+        float: adjusted score
+    """
     first = scores.get("first_name_score", math.nan)
     last = scores.get("last_name_score", math.nan)
     year = scores.get("birth_year_score", math.nan)
+    location = scores.get("birth_location_score", math.nan)
 
+    # First and last name pefect similiarity increase the score
+    # For the purposes of the demo we will leave it at 1.0
+    # TODO: adjust code so that score increments based on a range of name similarity values
     if first == 1.0 and last == 1.0 and year == 1.0:
         score += 15
 
@@ -415,18 +509,30 @@ def adjust_score(score, scores, query_birth_year, candidate_birth_year):
             query_year = int(float(query_birth_year))
             year_gap = abs(query_year - candidate_year)
 
+            # If year_gap is high then we reduce the score
             if year_gap > 20:
                 score -= 25
             elif year_gap > 10:
                 score -= 10
-
+            elif year_gap < 10:
+                score += 1
+        
+        # Any exceptions means that there is something wrong with the data meaning the score must be reduced
         except (TypeError, ValueError):
             score -= 5
+
+    
+    # If first name or location is less than 0.6 we reduce the score
+    # We will explain this more in Chapter 3: Methodology
 
     if not is_missing_number(first) and first < 0.6:
         score -= 20
 
+    if not is_missing_number(candidate_birth_location) and location < 0.6:
+        score -= 20
+
     score = max(0.0, min(100.0, score))
+    # TODO: Explore adjusting scores based on location distance (stretch goal)
     return round(score, 2)
 
 
