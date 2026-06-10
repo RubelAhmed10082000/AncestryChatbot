@@ -76,4 +76,18 @@ def test_search_person_ommited(monkeypatch):
 
     assert "BirthDate" not in captured
     
+def test_get_ancestors(monkeypatch):
+    captured = {}
 
+    def fake_call_wikitree(params):
+        captured.update(params)
+        return [{"ancestors": []}]
+    
+    result = extract.get_ancestors("Austen-489", depth=3)
+
+    assert result == [{"ancestors": []}]
+    assert captured["action"] == "getAncestors"
+    assert captured["key"] == "Austen-489"
+    assert captured["depth"] == 3
+    assert captured["fields"] == extract.FIELDS
+    assert captured["resolveRedirect"] == "1"
