@@ -83,11 +83,40 @@ def test_get_ancestors(monkeypatch):
         captured.update(params)
         return [{"ancestors": []}]
     
+    monkeypatch.setattr(extract, "call_wikitree", fake_call_wikitree)
+    
     result = extract.get_ancestors("Austen-489", depth=3)
 
     assert result == [{"ancestors": []}]
-    assert captured["action"] == "getAncestors"
+    assert captured["action"] == "getPeople&ancestors"
     assert captured["key"] == "Austen-489"
     assert captured["depth"] == 3
     assert captured["fields"] == extract.FIELDS
     assert captured["resolveRedirect"] == "1"
+
+def test_profile_extraction():
+    response = [
+        {
+            "profile": {"Id": 1, "Name": "Root-1"},
+            "matches": [
+                {"Id": 2, "Name": "Match-1"},
+                {"bad": "ignored"},
+            ],
+            "ancestors": [
+                {"Id": 3, "Name": "Ancestor-1"},
+            ],
+        }
+    ]
+
+    profiles = extract.flatten_api_profiles(response)
+
+    assert {"Id": 1, "Name": "Root-1"} in profiles
+    assert {"Id": 2, "Name": "Match-1"} in profiles
+    assert {"Id": 3, "Name": "Ancestor-1"} in profiles
+    assert {"bad": "ignored"} not in profiles
+
+def test_flatten_api_profiles_rejects_invalid_input():
+    assert extract.flatten_api_profiles(None) == []
+    assert extract.flatten_api_profiles("bad input") == []
+
+    
