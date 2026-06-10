@@ -2,9 +2,8 @@ import argparse
 import importlib.util
 import sys
 from pathlib import Path
-
 import pandas as pd
-
+from typing import Any
 
 DEFAULT_SCHEMA_DIR = Path("data/wikitree_schema")
 DEFAULT_CANDIDATE_MODULE_PATH = Path("app/retrieval/candidate_retrieval.py")
@@ -49,7 +48,14 @@ def safe_float(value):
         return None
 
 
-def evidence_coverage(row):
+def evidence_coverage(row: pd) -> float:
+    """
+    Calcuates how many rows in dataframe can be used to calculate confidence
+    Args -  
+        row (pd): row of data containing confidence scores of candidate profile
+    Returns -
+        float: ratio of strong column values compared to total available column values
+    """
     available = 0
     strong = 0
 
@@ -68,7 +74,10 @@ def evidence_coverage(row):
     return strong / available
 
 
-def birth_date_quality(row):
+def birth_date_quality(row: pd) -> str:
+    """
+    Provides synopsis for birth year match
+    """
     score = safe_float(row.get("birth_year_score"))
 
     if score is None:
@@ -83,7 +92,10 @@ def birth_date_quality(row):
     return "birth year missing or mismatch"
 
 
-def name_quality(row):
+def name_quality(row: pd) -> str:
+    """
+    Provides synopsis for name match
+    """
     first = safe_float(row.get("first_name_score")) or 0.0
     last = safe_float(row.get("last_name_score")) or 0.0
 
@@ -99,7 +111,15 @@ def name_quality(row):
     return "weak name match"
 
 
-def ambiguity_penalty(row, candidates):
+def ambiguity_penalty(row: pd, candidates: pd) -> float:
+    """
+    Calculates penalty for profiles that multiple close candidate matches
+    Args - 
+        row(pd): row of data containing similarity of candidates ranked
+        candidates(Any): containes candidate data
+    Returns -
+        float: penalty 0 - 15
+    """
     rank = safe_float(row.get("rank"))
 
     if rank != 1 or len(candidates) < 2:
@@ -108,7 +128,8 @@ def ambiguity_penalty(row, candidates):
     top_score = safe_float(candidates.iloc[0].get("rank_score")) or 0.0
     second_score = safe_float(candidates.iloc[1].get("rank_score")) or 0.0
     margin = top_score - second_score
-
+    
+    # Calculting penalties depending on rank closeness of first place and second place
     if margin >= 20:
         return 0.0
     if margin >= 10:
@@ -116,13 +137,14 @@ def ambiguity_penalty(row, candidates):
     if margin >= 5:
         return 10.0
 
-    return 15.0
-
-
-def calculate_confidence_score(row, candidates):
+def calculate_confidence_score(row: pd, candidates: pd) -> float:
+    """
+    Convert rank and score into confidence scores
+    """
     confidence = safe_float(row.get("rank_score")) or 0.0
     coverage = evidence_coverage(row)
 
+    # Confidence increases if coverage  score is high
     if coverage >= 0.8:
         confidence += 5
     elif coverage <= 0.3:
@@ -132,51 +154,46 @@ def calculate_confidence_score(row, candidates):
     last_name_score = safe_float(row.get("last_name_score"))
     birth_year_score = safe_float(row.get("birth_year_score"))
 
+    # Confidence score penalty based on low first and last name score
     if first_name_score is not None and first_name_score < 0.6:
         confidence -= 15
 
     if last_name_score is not None and last_name_score < 0.6:
         confidence -= 15
 
+    # Confidence penalty or boost based on birth_year_score
     if birth_year_score is not None:
         if birth_year_score == 0:
             confidence -= 10
         elif birth_year_score >= 1.0:
             confidence += 5
 
+    # Adding ambiguity penalty to confidence score
     confidence -= ambiguity_penalty(row, candidates)
     confidence = max(0.0, min(100.0, confidence))
 
     return round(confidence, 2)
 
-
-def confidence_band(confidence_score):
+def confidence_interpretation(confidence_score):
+    """
+    Placeholder interpertation for confidence score bands
+    """
     score = safe_float(confidence_score) or 0.0
 
     if score >= 90:
-        return "High"
-    if score >= 70:
-        return "Moderate"
-    if score >= 50:
-        return "Low"
-
-    return "Very low"
-
-
-def confidence_interpretation(confidence_score):
-    band = confidence_band(confidence_score)
-
-    if band == "High":
         return "Strong candidate based on close agreement across key fields. Still requires source verification."
-    if band == "Moderate":
+    if score >= 70:
         return "Plausible candidate, but at least one important field is missing, weak, or ambiguous."
-    if band == "Low":
+    if score >= 50:
         return "Weak candidate. Treat as exploratory unless supported by additional evidence."
 
     return "Very weak candidate. Likely not reliable without substantial extra evidence."
 
 
-def build_confidence_explanation(row):
+def build_confidence_explanation(row: pd) -> str:
+    """
+    Placeholder explanation for each attribute score
+    """
     parts = [name_quality(row), birth_date_quality(row)]
 
     location_score = safe_float(row.get("birth_location_score"))
@@ -198,7 +215,10 @@ def build_confidence_explanation(row):
     return "; ".join(parts) + "."
 
 
-def add_confidence_scores(candidates):
+def add_confidence_scores(candidates: pd) -> pd:
+    """
+    adding confidence scores and explanation to pandas dataframe
+    """
     if candidates.empty:
         return candidates
 
@@ -209,7 +229,6 @@ def add_confidence_scores(candidates):
         scores.append(calculate_confidence_score(row, df))
 
     df["confidence_score"] = scores
-    df["confidence_band"] = df["confidence_score"].apply(confidence_band)
     df["confidence_interpretation"] = df["confidence_score"].apply(confidence_interpretation)
     df["confidence_explanation"] = df.apply(build_confidence_explanation, axis=1)
 
@@ -227,6 +246,9 @@ def add_confidence_scores(candidates):
 
 
 def load_candidate_retriever(module_path):
+    """
+    loads candidate retriever claas from retrieval/candidate_retrieval.py module
+    """
     module_path = Path(module_path)
 
     if not module_path.exists() and module_path == DEFAULT_CANDIDATE_MODULE_PATH:
