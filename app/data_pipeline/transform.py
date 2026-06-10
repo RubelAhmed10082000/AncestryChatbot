@@ -83,11 +83,9 @@ def clean_text(value):
     if value is None:
         return None
 
-    try:
-        if pd.isna(value):
-            return None
-    except TypeError:
-        pass
+
+    if pd.isna(value):
+        return None
 
     # stripping irrelevant value from text such as whitespace or ellipsis
     text = str(value).strip()

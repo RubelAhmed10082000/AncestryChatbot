@@ -266,12 +266,10 @@ def clean_text(value: str) -> str:
     if value is None:
         return None
 
-    try:
-        if pd.isna(value):
-            return None
-    except TypeError:
-        pass
 
+    if pd.isna(value):
+         return None
+ 
     text = str(value).strip()
 
     if text in UNKNOWN_VALUES:
