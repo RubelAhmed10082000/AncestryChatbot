@@ -105,7 +105,7 @@ FIELDS = ",".join([
 ])
 
 
-def call_wikitree(params: dict) -> json:
+def call_wikitree(params: dict[str]) -> dict[str | Any]:
     """
     Retrieves data from WikiTree for a specific set of paramters 
     Designed to be passed in other functions
@@ -126,7 +126,7 @@ def call_wikitree(params: dict) -> json:
     return response.json()
 
 
-def search_person(seed: dict) -> json:
+def search_person(seed: dict[str | Any]) -> dict[str]:
     """
     Calls WikiAPI for one specific person using SearchPerson call
     Args -
@@ -190,7 +190,7 @@ def add_profile(profiles: list, value: dict) -> None:
     if "Id" in value or "Name" in value:
         profiles.append(value)
 
-def flatten_api_profiles(api_response: json) -> list:
+def flatten_api_profiles(api_response: dict[str | Any]) -> list:
     """
     Turns API response into flattened list
     
@@ -233,7 +233,7 @@ def flatten_api_profiles(api_response: json) -> list:
 
     return profiles
 
-def choose_best_search_match(seed: dict, search_response: json):
+def choose_best_search_match(seed: dict, search_response: dict[str | Any]) -> None:
     """
     Chooses the best match from the API call based on SEED_PROFILE
 
