@@ -164,7 +164,7 @@ def get_ancestors(profile_key: str, depth: int=ANCESTOR_DEPTH):
     """
     # Creating params for ancestor of profile
     params = {
-        "action": "getAncestors",
+        "action": "getPeople&ancestors",
         "key": profile_key,
         "depth": depth,
         "fields": FIELDS,
