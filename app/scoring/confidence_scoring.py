@@ -22,7 +22,6 @@ FRONT_COLUMNS = [
     "rank",
     "rank_score",
     "confidence_score",
-    "confidence_band",
     "wikitree_id",
     "full_name",
     "birth_year",
