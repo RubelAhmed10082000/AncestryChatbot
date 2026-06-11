@@ -136,6 +136,8 @@ def ambiguity_penalty(row: pd, candidates: pd) -> float:
         return 5.0
     if margin >= 5:
         return 10.0
+    
+    return 15.0
 
 def calculate_confidence_score(row: pd, candidates: pd) -> float:
     """
