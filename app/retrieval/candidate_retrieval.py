@@ -332,7 +332,7 @@ def token_overlap_similarity(left: str, right: str) -> float:
     if not left_tokens or not right_tokens:
         return 0.0
 
-    return len(left_tokens and right_tokens) / len(left_tokens or right_tokens)
+    return len(left_tokens & right_tokens) / len(left_tokens | right_tokens)
 
 
 def best_string_similarity(query_value: str, candidate_values: dict) -> int:
