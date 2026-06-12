@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, Query
 
-from app.api.schema import CandidateSearchRequests, CandidateSearchResponse
-from app.api.services import search_candidates_services, tree
+from app.api.schema import CandidateSearchRequest, CandidateSearchResponse
+from app.api.services import search_candidate, tree
 
 app = FastAPI(
     title="Ancestry Chatbot API",
@@ -14,9 +14,9 @@ def health_check():
     return {"status":"ok"}
 
 @app.post("/api/candidates/search", response_model=CandidateSearchResponse)
-def search_candidates(request: CandidateSearchRequests):
+def search_candidates(request: CandidateSearchRequest):
     try:
-        candidates = search_candidates_services(
+        candidates = search_candidate(
             first_name=request.first_name,
             last_name=request.last_name,
             birth_year=request.birth_year,
