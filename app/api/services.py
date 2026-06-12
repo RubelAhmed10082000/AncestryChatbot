@@ -54,7 +54,7 @@ def search_candidate(
     """
     retriever = CandidateRetriever(schema_dir=schema_dir)
 
-    candidates = retriever.find_candidate(
+    candidates = retriever.find_candidates(
         first_name=first_name,
         last_name=last_name,
         birth_year=birth_year,
