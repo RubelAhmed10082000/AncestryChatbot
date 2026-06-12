@@ -82,13 +82,13 @@ def tree(
     parent_edges = build_parent_edges(event)
 
     root_person_id = resolve_root_person_id(
-        people=people,
+        person=people,
         person_id=person_id,
         wikitree_id=wikitree_id,
     )
 
     nodes, edges = collect_ancestor_subgraph(
-        root_person=root_person_id,
+        root_person_id=root_person_id,
         person = people,
         parent_edges=parent_edges,
         max_generations=generations,
