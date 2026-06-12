@@ -164,7 +164,8 @@ def build_people_index(person: pd, names:pd, event:pd) -> pd:
     return people
 
 
-def resolve_root_person_id(person: pd, person_id: None, wikitree_id = None) -> str:
+def resolve_root_person_id(person: pd, person_id: str | None,
+                           wikitree_id: str | None) -> str:
     """
     resolves entity match using either wikitree_id or person_id
     Args -
@@ -179,7 +180,6 @@ def resolve_root_person_id(person: pd, person_id: None, wikitree_id = None) -> s
         if not match.empty:
             return str(match.iloc[0]["Person_ID"])
         raise ValueError(f"No person found with Person_ID={person_id}")
-    
     if wikitree_id:
         match = person[person["Wikitree_ID"] == wikitree_id]
         if not match.empty:
