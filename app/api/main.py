@@ -57,7 +57,7 @@ def get_tree_by_person_id(
     except Exception as exc:
          raise HTTPException(status_code=500, detail=f"Tree generation failed: {exc}")
     
-@app.get("api/tree/by-wikitree/{wikitree_id}")
+@app.get("/api/tree/by-wikitree/{wikitree_id}")
 def get_tree_by_wikitree_id(
     wikitree_id: str,
     generations: int = Query(default=3, ge=0, le=6),
