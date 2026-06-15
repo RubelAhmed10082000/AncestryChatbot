@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Ancestry Chatbot</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <main class="app-shell">
+    <header class="app-header">
+      <div>
+        <h1>Ancestry Chatbot</h1>
+        <p>Search probable ancestors and generate a preliminary family tree.</p>
+      </div>
+      <button id="reset-button" class="secondary-button">Reset</button>
+    </header>
+
+    <section id="chat-window" class="chat-window"></section>
+
+    <form id="chat-form" class="chat-form">
+      <input
+        id="chat-input"
+        type="text"
+        autocomplete="off"
+        placeholder="Type your answer..."
+      />
+      <button type="submit">Send</button>
+    </form>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
