@@ -1,13 +1,32 @@
 from fastapi import FastAPI, HTTPException, Query
-
 from app.api.schema import CandidateSearchRequest, CandidateSearchResponse
 from app.api.services import search_candidate, tree
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 
 app = FastAPI(
     title="Ancestry Chatbot API",
     version = "0.1.0",
     description="API layer"
 )
+
+templates = Jinja2Templates(directory="app/ui/templates")
+
+app.mount(
+    "/static",
+    StaticFiles(directory="app/ui/static"),
+    name="static",
+)
+
+
+@app.get("/", response_class=HTMLResponse)
+def chatbot_ui(request: Request):
+    return templates.TemplateResponse(
+        "index.html",
+        {"request": request},
+    )
 
 @app.get("/health")
 def health_check():
