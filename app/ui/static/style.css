@@ -1,0 +1,129 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #f4f5f7;
+  color: #1f2937;
+}
+
+.app-shell {
+  max-width: 920px;
+  height: 100vh;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+}
+
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  padding-bottom: 16px;
+}
+
+.app-header h1 {
+  margin: 0;
+  font-size: 28px;
+}
+
+.app-header p {
+  margin: 6px 0 0;
+  color: #6b7280;
+}
+
+.chat-window {
+  flex: 1;
+  overflow-y: auto;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  padding: 18px;
+}
+
+.message {
+  max-width: 80%;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  border-radius: 14px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.message.assistant {
+  background: #eef2ff;
+  margin-right: auto;
+}
+
+.message.user {
+  background: #111827;
+  color: white;
+  margin-left: auto;
+}
+
+.chat-form {
+  display: flex;
+  gap: 10px;
+  padding-top: 14px;
+}
+
+.chat-form input {
+  flex: 1;
+  padding: 14px;
+  border-radius: 999px;
+  border: 1px solid #d1d5db;
+  font-size: 16px;
+}
+
+.chat-form button,
+.secondary-button,
+.card-button {
+  border: none;
+  border-radius: 999px;
+  padding: 12px 18px;
+  background: #111827;
+  color: white;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.secondary-button {
+  background: #e5e7eb;
+  color: #111827;
+}
+
+.candidate-card,
+.tree-panel {
+  background: white;
+  border: 1px solid #c7d2fe;
+  border-radius: 12px;
+  padding: 14px;
+  margin-top: 10px;
+}
+
+.candidate-card h3 {
+  margin: 0 0 6px;
+}
+
+.meta {
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.confidence {
+  font-weight: 700;
+}
+
+.tree-generation {
+  margin-top: 12px;
+  padding-top: 8px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.tree-person {
+  margin: 6px 0;
+}
