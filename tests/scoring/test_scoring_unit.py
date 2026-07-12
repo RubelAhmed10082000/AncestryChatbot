@@ -17,20 +17,6 @@ def test_safe_float_returns_none_for_missing_or_invalid_values():
 
 ### Testing evidence_coverage ###
 
-def test_evidence_coverage_all_strong_scores_returns_one():
-    row = pd.Series(
-        {
-            "first_name_score": 1.0,
-            "last_name_score": 0.95,
-            "birth_year_score": 1.0,
-            "birth_location_score": 0.85,
-            "gender_score": 1.0,
-        }
-    )
-
-    assert confidence_scoring.evidence_coverage(row) == 1.0
-
-
 def test_evidence_coverage_ratio():
     row = pd.Series(
         {
@@ -42,10 +28,27 @@ def test_evidence_coverage_ratio():
         }
     )
 
-    assert confidence_scoring.evidence_coverage(row) == pytest.approx(3 / 5)
+    assert confidence_scoring.evidence_coverage(row) == pytest.approx(5 / 5)
 
 
-def test_evidence_coverage_ignores_missing_scores():
+def test_strong_evidence_ratio():
+    row = pd.Series(
+        {
+            "first_name_score": 1.0,
+            "last_name_score": 0.7,
+            "birth_year_score": 1.0,
+            "birth_location_score": 0.4,
+            "gender_score": 1.0,
+        }
+    )
+
+    assert confidence_scoring.strong_evidence_ratio(row) == pytest.approx(3 / 5)
+
+    assert confidence_scoring.evidence_coverage(row) == 1.0
+
+
+
+def test_evidence_coverage_counts_missing_scores_as_unsupplied():
     row = pd.Series(
         {
             "first_name_score": 1.0,
@@ -56,7 +59,21 @@ def test_evidence_coverage_ignores_missing_scores():
         }
     )
 
-    assert confidence_scoring.evidence_coverage(row) == pytest.approx(2 / 3)
+    assert confidence_scoring.evidence_coverage(row) == pytest.approx(3 / 5)
+
+
+def test_strong_evidence_ratio_ignores_missing_scores():
+    row = pd.Series(
+        {
+            "first_name_score": 1.0,
+            "last_name_score": None,
+            "birth_year_score": 0.5,
+            "birth_location_score": None,
+            "gender_score": 1.0,
+        }
+    )
+
+    assert confidence_scoring.strong_evidence_ratio(row) == pytest.approx(2 / 3)
 
 
 def test_evidence_coverage_no_scores():
@@ -384,11 +401,12 @@ def test_build_confidence_explanation_strong_candidate():
     result = confidence_scoring.build_confidence_explanation(row)
 
     assert result == (
-        "exact/near-exact name match; "
-        "exact birth-year match; "
-        "strong birth-location match; "
-        "gender match."
-    )
+    "exact/near-exact name match; "
+    "exact birth-year match; "
+    "strong birth-location match; "
+    "gender match; "
+    "high evidence coverage."
+)
 
 
 def test_build_confidence_explanation_partial_candidate():
@@ -405,10 +423,49 @@ def test_build_confidence_explanation_partial_candidate():
     result = confidence_scoring.build_confidence_explanation(row)
 
     assert result == (
-        "partial name match; "
-        "weak birth-year match; "
-        "partial birth-location match; "
-        "gender mismatch or missing."
+    "partial name match; "
+    "weak birth-year match; "
+    "partial birth-location match; "
+    "gender mismatch or missing; "
+    "high evidence coverage."
+)
+
+def test_build_confidence_explanation_limited_evidence():
+    row = pd.Series(
+        {
+            "first_name_score": 1.0,
+            "last_name_score": 1.0,
+            "birth_year_score": None,
+            "birth_location_score": None,
+            "gender_score": None,
+        }
+    )
+
+    result = confidence_scoring.build_confidence_explanation(row)
+
+    assert result == (
+        "exact/near-exact name match; "
+        "birth year not supplied; "
+        "limited evidence coverage."
+    )
+
+def test_build_confidence_explanation_moderate_evidence():
+    row = pd.Series(
+        {
+            "first_name_score": 1.0,
+            "last_name_score": 1.0,
+            "birth_year_score": 1.0,
+            "birth_location_score": None,
+            "gender_score": None,
+        }
+    )
+
+    result = confidence_scoring.build_confidence_explanation(row)
+
+    assert result == (
+        "exact/near-exact name match; "
+        "exact birth-year match; "
+        "moderate evidence coverage."
     )
 
 ### Testing Add_Confidence_Scores ###
