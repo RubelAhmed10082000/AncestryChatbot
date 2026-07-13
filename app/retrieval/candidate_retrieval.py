@@ -526,7 +526,7 @@ def adjust_score(score: float, scores: dict, query_birth_year: Any, candidate_bi
     if not is_missing_number(first) and first < 0.6:
         score -= 20
 
-    if not is_missing_number(candidate_birth_location) and location < 0.6:
+    if not is_missing_number(location) and location < 0.6:
         score -= 20
 
     score = max(0.0, min(100.0, score))

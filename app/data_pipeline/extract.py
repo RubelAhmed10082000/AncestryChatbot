@@ -164,12 +164,12 @@ def get_ancestors(profile_key: str, depth: int=ANCESTOR_DEPTH):
     """
     # Creating params for ancestor of profile
     params = {
-        "action": "getPeople&ancestors",
-        "key": profile_key,
-        "depth": depth,
+        "action": "getPeople",
+        "keys": profile_key,
+        "ancestors": depth,
         "fields": FIELDS,
-        "resolveRedirect": "1",
     }
+
     # Calling call_wikitree() function using params
     return call_wikitree(params)
 
@@ -220,6 +220,12 @@ def flatten_api_profiles(api_response: dict[str | Any]) -> list:
         # Appending any outer nested profiles to profiles list
         if "profile" in item:
             add_profile(profiles, item.get("profile"))
+        
+        people = item.get("people")
+
+        if isinstance(people, dict):
+            for profile in people.values():
+                add_profile(profiles, profile)
 
         # Appending to profile any inner nested profiles (ancestors) to profiles list
         for key in ["matches", "ancestors"]:
@@ -235,8 +241,7 @@ def flatten_api_profiles(api_response: dict[str | Any]) -> list:
 
 def choose_best_search_match(seed: dict, search_response: dict[str | Any]) -> None:
     """
-    Chooses the best match from the API call based on SEED_PROFILE
-
+    Selects the best complete WikiTree profile for a seed figure.
     Args - 
         seed(dict): seed profile chosen to be matched
         search_response(json): JSON respone of profile returned by call_wikitree()
@@ -244,33 +249,63 @@ def choose_best_search_match(seed: dict, search_response: dict[str | Any]) -> No
         List: Profile that is best match to seed profile
     """
 
-    # If seed has a wikitree id we return thier atributes
-    if seed.get("known_wikitree_id"):
+    matches = flatten_api_profiles(search_response)
+    known_wikitree_id = seed.get("known_wikitree_id")
+
+    # Storing all profiles that match the WikiTreedID
+    if known_wikitree_id:
+        for match in matches:
+            if match.get("Name") == known_wikitree_id:
+                    selected = dict(match)
+                    selected["SeedLabel"] = seed["label"]
+                    selected["SelectionMethod"] = "known_wikitree_id"
+                    return selected
         return {
-            "Name": seed["known_wikitree_id"],
+            "Name": known_wikitree_id,
             "SeedLabel": seed["label"],
             "SelectionMethod": "known_wikitree_id",
         }
 
-    # We get all potential matches by calling the flatten_api_profiles()
-    matches = flatten_api_profiles(search_response)
-    if not matches:
+    if not matches: 
         return None
     
-    # If birth date and label are matches to the SEED PROFILE we return it as a match
     birth_date = seed.get("birth_date")
+    
+    # if there is no match with names we can match based on date of birt
     if birth_date:
         for match in matches:
             if match.get("BirthDate") == birth_date:
-                match["SeedLabel"] = seed["label"]
-                match["SelectionMethod"] = "exact_birth_date_match"
-                return match
-    
-    best = matches[0]
-    best["SeedLabel"] = seed["label"]
-    best["SelectionMethod"] = "first_search_result"
-    return best
+                selected = dict(match)
+                selected["SeedLabel"] = seed["label"]
+                selected["SelectionMethod"] = "exact_birth_date_match"
+                return selected
+            
+    selected = dict(matches[0])
+    selected["SeedLabel"] = seed["label"]
+    selected["SelectionMethod"] = "first_search_result"
 
+    return selected
+
+def enrich_selected_profile(
+    selected: dict[str, Any],
+    profiles: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """
+    Adds extra data to profiles that have missing data using ancestors 
+    """
+    profile_key = selected.get("Name")
+
+    if not profile_key:
+        return selected
+
+    for profile in profiles:
+        if profile.get("Name") == profile_key:
+            enriched = dict(profile)
+            enriched["SeedLabel"] = selected.get("SeedLabel")
+            enriched["SelectionMethod"] = selected.get("SelectionMethod")
+            return enriched
+
+    return selected
 
 def normalise_person(profile: list) -> dict:
     """
@@ -409,16 +444,34 @@ def process_seed(seed, raw_search_results, raw_ancestor_results, selected_seeds,
         return
 
     print(f"  Selected WikiTree profile: {profile_key}")
-    selected_seeds.append(make_seed_row(label, selected))
 
     time.sleep(REQUEST_DELAY_SECONDS)
 
     print(f"  Fetching ancestors depth={ANCESTOR_DEPTH}")
-    ancestor_response = get_ancestors(profile_key, depth=ANCESTOR_DEPTH)
+    ancestor_response = get_ancestors(
+        profile_key,
+        depth=ANCESTOR_DEPTH,
+    )
     raw_ancestor_results[profile_key] = ancestor_response
 
     profiles = flatten_api_profiles(ancestor_response)
-    profiles.append(selected)
+
+
+    selected = enrich_selected_profile(
+        selected,
+        profiles,
+    )
+
+    selected_seeds.append(
+        make_seed_row(label, selected)
+    )
+
+
+    if not any(
+        profile.get("Name") == profile_key
+        for profile in profiles
+    ):
+        profiles.append(selected)
 
     for profile in profiles:
         wikitree_id = profile.get("Name")

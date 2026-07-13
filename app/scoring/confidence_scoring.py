@@ -55,22 +55,38 @@ def evidence_coverage(row: pd) -> float:
     Returns -
         float: ratio of strong column values compared to total available column values
     """
-    available = 0
-    strong = 0
+    supplied = 0
 
-    for col in SCORE_COLUMNS:
-        value = safe_float(row.get(col))
-        if value is None:
-            continue
+    for columns in SCORE_COLUMNS:
+        value = safe_float(row.get(columns))
 
-        available += 1
-        if value >= 0.8:
-            strong += 1
+        if value is not None:
+            supplied += 1
 
-    if available == 0:
+    return supplied / len(SCORE_COLUMNS)
+
+def strong_evidence_ratio(row: pd.Series) -> float:
+    """
+    Returns the amount of evidence field that strongly agree
+    with the candidate.
+    """
+    supplied_values = []
+
+    for column in SCORE_COLUMNS:
+        value = safe_float(row.get(column))
+
+        if value is not None:
+            supplied_values.append(value)
+
+    if not supplied_values:
         return 0.0
 
-    return strong / available
+    strong_matches = sum(
+        value >= 0.8
+        for value in supplied_values
+    )
+
+    return strong_matches / len(supplied_values)
 
 
 def birth_date_quality(row: pd) -> str:
@@ -143,12 +159,17 @@ def calculate_confidence_score(row: pd, candidates: pd) -> float:
     Convert rank and score into confidence scores
     """
     confidence = safe_float(row.get("rank_score")) or 0.0
-    coverage = evidence_coverage(row)
 
-    # Confidence increases if coverage  score is high
-    if coverage >= 0.8:
+    coverage = evidence_coverage(row)
+    evidence_strength = strong_evidence_ratio(row)
+
+
+    # Confidence increases if coverage score is high, penalised if low
+    if coverage >= 0.8 and evidence_strength >= 0.8:
         confidence += 5
-    elif coverage <= 0.3:
+    elif coverage <= 0.4:
+        confidence -= 20
+    elif coverage <= 0.6:
         confidence -= 10
 
     first_name_score = safe_float(row.get("first_name_score"))
@@ -198,6 +219,7 @@ def build_confidence_explanation(row: pd) -> str:
     parts = [name_quality(row), birth_date_quality(row)]
 
     location_score = safe_float(row.get("birth_location_score"))
+    
     if location_score is not None:
         if location_score >= 0.5:
             parts.append("strong birth-location match")
@@ -207,12 +229,22 @@ def build_confidence_explanation(row: pd) -> str:
             parts.append("birth location missing or mismatch")
 
     gender_score = safe_float(row.get("gender_score"))
+
     if gender_score is not None:
         if gender_score >= 1.0:
             parts.append("gender match")
         else:
             parts.append("gender mismatch or missing")
+    
+    coverage = evidence_coverage(row)
 
+    if coverage >= 0.8:
+        parts.append("high evidence coverage")
+    elif coverage >= 0.6:
+        parts.append("moderate evidence coverage")
+    else:
+        parts.append("limited evidence coverage")
+        
     return "; ".join(parts) + "."
 
 
