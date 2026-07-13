@@ -81,18 +81,17 @@ def test_get_ancestors(monkeypatch):
 
     def fake_call_wikitree(params):
         captured.update(params)
-        return [{"ancestors": []}]
-    
+        return [{"people": {}}]
+
     monkeypatch.setattr(extract, "call_wikitree", fake_call_wikitree)
-    
+
     result = extract.get_ancestors("Austen-489", depth=3)
 
-    assert result == [{"ancestors": []}]
-    assert captured["action"] == "getPeople&ancestors"
-    assert captured["key"] == "Austen-489"
-    assert captured["depth"] == 3
+    assert result == [{"people": {}}]
+    assert captured["action"] == "getPeople"
+    assert captured["keys"] == "Austen-489"
+    assert captured["ancestors"] == 3
     assert captured["fields"] == extract.FIELDS
-    assert captured["resolveRedirect"] == "1"
 
 def test_profile_extraction():
     response = [
