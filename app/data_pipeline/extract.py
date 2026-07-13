@@ -51,7 +51,8 @@ SEED_FIGURES = [
         "label": "Isaac Newton",
         "first_name": "Isaac",
         "last_name": "Newton",
-        "birth_date": "1643-01-04",
+        "birth_date": "1642-12-25",
+        "known_wikitree_id": "Newton-17",
     },
     {
         "label": "William Shakespeare",
