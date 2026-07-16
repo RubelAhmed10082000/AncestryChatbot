@@ -24,8 +24,9 @@ app.mount(
 @app.get("/", response_class=HTMLResponse)
 def chatbot_ui(request: Request):
     return templates.TemplateResponse(
-        "index.html",
-        {"request": request},
+        request=request,
+        name="index.html",
+        context={},
     )
 
 @app.get("/health")
@@ -82,19 +83,18 @@ def get_tree_by_wikitree_id(
     generations: int = Query(default=3, ge=0, le=6),
     include_missing_stubs: bool = False,
 ):
-     try:
-          return tree(
-               wikitree_id=wikitree_id,
-               generations=generations,
-               include_missing_stubs=include_missing_stubs,
-          )
-     
-     except ValueError as exc:
-          raise HTTPException(status_code=404, detail=str(exc))
-     
-     except FileNotFoundError as exc:
-          raise HTTPException(status_code=500, detail=str(exc))
-     
-     except Exception as exc:
-          raise HTTPException(status_code=500, detail=f"Tree generation failed: {exc}")
-     
+    try:
+        return tree(
+            wikitree_id=wikitree_id,
+            generations=generations,
+            include_missing_stubs=include_missing_stubs,
+        )
+
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Tree generation failed: {exc}")
