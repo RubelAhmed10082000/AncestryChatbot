@@ -303,6 +303,59 @@ def test_calculate_confidence_score_penalises_birth_year_mismatch():
     assert confidence_scoring.calculate_confidence_score(row, candidates) == 75.0
 
 
+def test_calculate_confidence_score_penalises_gender_conflict():
+    candidates = pd.DataFrame(
+        [
+            {
+                "rank": 1,
+                "rank_score": 90,
+                "first_name_score": 1.0,
+                "last_name_score": 1.0,
+                "birth_year_score": 1.0,
+                "birth_location_score": 1.0,
+                "gender_score": 0.0,
+            }
+        ]
+    )
+
+    row = candidates.iloc[0]
+
+    assert confidence_scoring.contradiction_penalty(row) == 25.0
+    assert confidence_scoring.calculate_confidence_score(row, candidates) == 75.0
+
+
+def test_calculate_confidence_score_strongly_penalises_location_conflict():
+    candidates = pd.DataFrame(
+        [
+            {
+                "rank": 1,
+                "rank_score": 85,
+                "first_name_score": 1.0,
+                "last_name_score": 1.0,
+                "birth_year_score": 1.0,
+                "birth_location_score": 0.2,
+                "gender_score": 1.0,
+            }
+        ]
+    )
+
+    row = candidates.iloc[0]
+
+    assert confidence_scoring.contradiction_penalty(row) == 30.0
+    assert confidence_scoring.calculate_confidence_score(row, candidates) == 65.0
+
+
+def test_contradiction_penalty_ignores_unsupplied_fields():
+    row = pd.Series(
+        {
+            "birth_location_score": None,
+            "gender_score": None,
+        }
+    )
+
+    assert confidence_scoring.contradiction_penalty(row) == 0.0
+
+
 def test_calculate_confidence_score_penalises_ambiguity_for_close_second_candidate():
     candidates = pd.DataFrame(
         [
@@ -425,8 +478,8 @@ def test_build_confidence_explanation_partial_candidate():
     assert result == (
     "partial name match; "
     "weak birth-year match; "
-    "partial birth-location match; "
-    "gender mismatch or missing; "
+    "birth location conflicts with candidate or is missing; "
+    "gender conflicts with candidate or is missing; "
     "high evidence coverage."
 )
 

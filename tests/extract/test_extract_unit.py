@@ -191,6 +191,64 @@ def test_normalize_person_missing_date():
     assert row["wikitree_id"] == 'Test-1'
     assert row["data_status"] is None
 
+
+def test_add_search_candidates_adds_hard_negatives_without_overwriting_people():
+    people = {
+        "Austen-489": {
+            "wikitree_id": "Austen-489",
+            "first_name": "Complete Jane",
+        }
+    }
+    search_response = [
+        {
+            "matches": [
+                {
+                    "Id": 5688919,
+                    "Name": "Austen-489",
+                    "FirstName": "Sparse Jane",
+                },
+                {
+                    "Id": 28677854,
+                    "Name": "Austen-1465",
+                    "FirstName": "Jane",
+                    "LastNameAtBirth": "Austen",
+                    "BirthDate": "1775-00-00",
+                },
+                {"Id": 3556594},
+            ]
+        }
+    ]
+
+    added = extract.add_search_candidates(search_response, people)
+
+    assert added == ["Austen-1465"]
+    assert people["Austen-489"]["first_name"] == "Complete Jane"
+    assert people["Austen-1465"]["person_id"] == 28677854
+
+
+def test_add_search_candidates_excludes_ground_truth_root():
+    people = {}
+    search_response = [
+        {
+            "matches": [
+                {
+                    "Id": 5688919,
+                    "Name": "Austen-489",
+                    "FirstName": "Jane",
+                }
+            ]
+        }
+    ]
+
+    added = extract.add_search_candidates(
+        search_response,
+        people,
+        excluded_wikitree_ids={"Austen-489"},
+    )
+
+    assert added == []
+    assert people == {}
+
 def test_extract_relationships():
     profile = {
         "Id": 5688919,

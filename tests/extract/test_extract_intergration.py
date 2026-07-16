@@ -22,7 +22,15 @@ def test_process_seed_extract(monkeypatch):
                     "BirthLocation": "Steventon, Hampshire, England",
                     "Father": 1124609,
                     "Mother": 1124608,
-                }
+                },
+                {
+                    "Id": 28677854,
+                    "Name": "Austen-1465",
+                    "FirstName": "Jane",
+                    "LastNameAtBirth": "Austen",
+                    "BirthDate": "1775-00-00",
+                    "BirthLocation": "Kippington, Kent, England",
+                },
             ]
         }
     ]
@@ -75,6 +83,7 @@ def test_process_seed_extract(monkeypatch):
     assert selected_seeds[0]["wikitree_id"] == "Austen-489"
 
     assert "Austen-489" in people_by_wikitree_id
+    assert "Austen-1465" in people_by_wikitree_id
     assert "Austen-109" in people_by_wikitree_id
     assert "Leigh-138" in people_by_wikitree_id
 
