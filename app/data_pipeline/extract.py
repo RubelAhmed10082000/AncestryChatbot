@@ -344,6 +344,35 @@ def normalise_person(profile: list) -> dict:
     }
 
 
+def add_search_candidates(
+    search_response: dict[str | Any],
+    people_by_wikitree_id: dict[str, dict],
+    excluded_wikitree_ids: set[str] | None = None,
+) -> list[str]:
+    """Add non-root search matches as searchable hard-negative candidates.
+
+    Existing people are never overwritten because ancestor responses usually
+    contain more complete profiles than search responses.
+    """
+    excluded_wikitree_ids = excluded_wikitree_ids or set()
+    added_wikitree_ids = []
+
+    for profile in flatten_api_profiles(search_response):
+        wikitree_id = profile.get("Name")
+
+        if (
+            not wikitree_id
+            or wikitree_id in excluded_wikitree_ids
+            or wikitree_id in people_by_wikitree_id
+        ):
+            continue
+
+        people_by_wikitree_id[wikitree_id] = normalise_person(profile)
+        added_wikitree_ids.append(wikitree_id)
+
+    return added_wikitree_ids
+
+
 def extract_relationships(profile: list) -> list:
     """
     Extracts relationships from profile
@@ -481,6 +510,12 @@ def process_seed(seed, raw_search_results, raw_ancestor_results, selected_seeds,
 
         people_by_wikitree_id[wikitree_id] = normalise_person(profile)
         relationships.extend(extract_relationships(profile))
+
+    add_search_candidates(
+        search_response,
+        people_by_wikitree_id,
+        excluded_wikitree_ids={profile_key},
+    )
 
     time.sleep(REQUEST_DELAY_SECONDS)
 
