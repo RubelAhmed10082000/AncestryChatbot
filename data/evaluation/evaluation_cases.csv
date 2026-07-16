@@ -1,0 +1,64 @@
+case_id,seed_label,condition,expected_wikitree_id,first_name,last_name,birth_year,birth_location,gender,perturbation_notes
+Clemens-1__full_profile,Samuel Langhorne Clemens / Mark Twain,full_profile,Clemens-1,Samuel,Clemens,1835.0,"Florida, Monroe, Missouri, United States",Male,All available identifying fields supplied correctly.
+Clemens-1__name_year,Samuel Langhorne Clemens / Mark Twain,name_year,Clemens-1,Samuel,Clemens,1835.0,,,"Only first name, surname and birth year supplied."
+Clemens-1__name_only,Samuel Langhorne Clemens / Mark Twain,name_only,Clemens-1,Samuel,Clemens,,,,Only first name and surname supplied.
+Clemens-1__noisy_input,Samuel Langhorne Clemens / Mark Twain,noisy_input,Clemens-1,Samuel,Clmeens,1835.0,"Missouri, United States",Male,One adjacent-character surname typo and a shortened birth location.
+Clemens-1__wrong_year,Samuel Langhorne Clemens / Mark Twain,wrong_year,Clemens-1,Samuel,Clemens,1855.0,"Florida, Monroe, Missouri, United States",Male,Birth year increased by exactly 20 years.
+Clemens-1__wrong_location,Samuel Langhorne Clemens / Mark Twain,wrong_location,Clemens-1,Samuel,Clemens,1835.0,"Tokyo, Japan",Male,"Birth location replaced with the unrelated location 'Tokyo, Japan'."
+Clemens-1__wrong_gender,Samuel Langhorne Clemens / Mark Twain,wrong_gender,Clemens-1,Samuel,Clemens,1835.0,"Florida, Monroe, Missouri, United States",Female,Gender replaced with the opposite dataset value.
+Franklin-10478__full_profile,Aretha Franklin,full_profile,Franklin-10478,Aretha,Franklin,1942.0,"Memphis, Shelby, Tennessee, United States",Female,All available identifying fields supplied correctly.
+Franklin-10478__name_year,Aretha Franklin,name_year,Franklin-10478,Aretha,Franklin,1942.0,,,"Only first name, surname and birth year supplied."
+Franklin-10478__name_only,Aretha Franklin,name_only,Franklin-10478,Aretha,Franklin,,,,Only first name and surname supplied.
+Franklin-10478__noisy_input,Aretha Franklin,noisy_input,Franklin-10478,Aretha,Fraknlin,1942.0,"Tennessee, United States",Female,One adjacent-character surname typo and a shortened birth location.
+Franklin-10478__wrong_year,Aretha Franklin,wrong_year,Franklin-10478,Aretha,Franklin,1962.0,"Memphis, Shelby, Tennessee, United States",Female,Birth year increased by exactly 20 years.
+Franklin-10478__wrong_location,Aretha Franklin,wrong_location,Franklin-10478,Aretha,Franklin,1942.0,"Tokyo, Japan",Female,"Birth location replaced with the unrelated location 'Tokyo, Japan'."
+Franklin-10478__wrong_gender,Aretha Franklin,wrong_gender,Franklin-10478,Aretha,Franklin,1942.0,"Memphis, Shelby, Tennessee, United States",Male,Gender replaced with the opposite dataset value.
+Darwin-15__full_profile,Charles Darwin,full_profile,Darwin-15,Charles,Darwin,1809.0,"Shrewsbury, Shropshire, England",Male,All available identifying fields supplied correctly.
+Darwin-15__name_year,Charles Darwin,name_year,Darwin-15,Charles,Darwin,1809.0,,,"Only first name, surname and birth year supplied."
+Darwin-15__name_only,Charles Darwin,name_only,Darwin-15,Charles,Darwin,,,,Only first name and surname supplied.
+Darwin-15__noisy_input,Charles Darwin,noisy_input,Darwin-15,Charles,Dawrin,1809.0,"Shropshire, England",Male,One adjacent-character surname typo and a shortened birth location.
+Darwin-15__wrong_year,Charles Darwin,wrong_year,Darwin-15,Charles,Darwin,1829.0,"Shrewsbury, Shropshire, England",Male,Birth year increased by exactly 20 years.
+Darwin-15__wrong_location,Charles Darwin,wrong_location,Darwin-15,Charles,Darwin,1809.0,"Tokyo, Japan",Male,"Birth location replaced with the unrelated location 'Tokyo, Japan'."
+Darwin-15__wrong_gender,Charles Darwin,wrong_gender,Darwin-15,Charles,Darwin,1809.0,"Shrewsbury, Shropshire, England",Female,Gender replaced with the opposite dataset value.
+Austen-489__full_profile,Jane Austen,full_profile,Austen-489,Jane,Austen,1775.0,"Steventon, Hampshire, England",Female,All available identifying fields supplied correctly.
+Austen-489__name_year,Jane Austen,name_year,Austen-489,Jane,Austen,1775.0,,,"Only first name, surname and birth year supplied."
+Austen-489__name_only,Jane Austen,name_only,Austen-489,Jane,Austen,,,,Only first name and surname supplied.
+Austen-489__noisy_input,Jane Austen,noisy_input,Austen-489,Jane,Autsen,1775.0,"Hampshire, England",Female,One adjacent-character surname typo and a shortened birth location.
+Austen-489__wrong_year,Jane Austen,wrong_year,Austen-489,Jane,Austen,1795.0,"Steventon, Hampshire, England",Female,Birth year increased by exactly 20 years.
+Austen-489__wrong_location,Jane Austen,wrong_location,Austen-489,Jane,Austen,1775.0,"Tokyo, Japan",Female,"Birth location replaced with the unrelated location 'Tokyo, Japan'."
+Austen-489__wrong_gender,Jane Austen,wrong_gender,Austen-489,Jane,Austen,1775.0,"Steventon, Hampshire, England",Male,Gender replaced with the opposite dataset value.
+Newton-17__full_profile,Isaac Newton,full_profile,Newton-17,Isaac,Newton,1642.0,"Woolsthorpe by Colsterworth, Lincolnshire, England",Male,All available identifying fields supplied correctly.
+Newton-17__name_year,Isaac Newton,name_year,Newton-17,Isaac,Newton,1642.0,,,"Only first name, surname and birth year supplied."
+Newton-17__name_only,Isaac Newton,name_only,Newton-17,Isaac,Newton,,,,Only first name and surname supplied.
+Newton-17__noisy_input,Isaac Newton,noisy_input,Newton-17,Isaac,Netwon,1642.0,"Lincolnshire, England",Male,One adjacent-character surname typo and a shortened birth location.
+Newton-17__wrong_year,Isaac Newton,wrong_year,Newton-17,Isaac,Newton,1662.0,"Woolsthorpe by Colsterworth, Lincolnshire, England",Male,Birth year increased by exactly 20 years.
+Newton-17__wrong_location,Isaac Newton,wrong_location,Newton-17,Isaac,Newton,1642.0,"Tokyo, Japan",Male,"Birth location replaced with the unrelated location 'Tokyo, Japan'."
+Newton-17__wrong_gender,Isaac Newton,wrong_gender,Newton-17,Isaac,Newton,1642.0,"Woolsthorpe by Colsterworth, Lincolnshire, England",Female,Gender replaced with the opposite dataset value.
+Shakespeare-1__full_profile,William Shakespeare,full_profile,Shakespeare-1,William,Shakespeare,1564.0,"Stratford-upon-Avon, Warwickshire, England",Male,All available identifying fields supplied correctly.
+Shakespeare-1__name_year,William Shakespeare,name_year,Shakespeare-1,William,Shakespeare,1564.0,,,"Only first name, surname and birth year supplied."
+Shakespeare-1__name_only,William Shakespeare,name_only,Shakespeare-1,William,Shakespeare,,,,Only first name and surname supplied.
+Shakespeare-1__noisy_input,William Shakespeare,noisy_input,Shakespeare-1,William,Shaksepeare,1564.0,"Warwickshire, England",Male,One adjacent-character surname typo and a shortened birth location.
+Shakespeare-1__wrong_year,William Shakespeare,wrong_year,Shakespeare-1,William,Shakespeare,1584.0,"Stratford-upon-Avon, Warwickshire, England",Male,Birth year increased by exactly 20 years.
+Shakespeare-1__wrong_location,William Shakespeare,wrong_location,Shakespeare-1,William,Shakespeare,1564.0,"Tokyo, Japan",Male,"Birth location replaced with the unrelated location 'Tokyo, Japan'."
+Shakespeare-1__wrong_gender,William Shakespeare,wrong_gender,Shakespeare-1,William,Shakespeare,1564.0,"Stratford-upon-Avon, Warwickshire, England",Female,Gender replaced with the opposite dataset value.
+Nightingale-64__full_profile,Florence Nightingale,full_profile,Nightingale-64,Florence,Nightingale,1820.0,"Firenze, Firenze, Tuscany, Italy",Female,All available identifying fields supplied correctly.
+Nightingale-64__name_year,Florence Nightingale,name_year,Nightingale-64,Florence,Nightingale,1820.0,,,"Only first name, surname and birth year supplied."
+Nightingale-64__name_only,Florence Nightingale,name_only,Nightingale-64,Florence,Nightingale,,,,Only first name and surname supplied.
+Nightingale-64__noisy_input,Florence Nightingale,noisy_input,Nightingale-64,Florence,Nighitngale,1820.0,"Tuscany, Italy",Female,One adjacent-character surname typo and a shortened birth location.
+Nightingale-64__wrong_year,Florence Nightingale,wrong_year,Nightingale-64,Florence,Nightingale,1840.0,"Firenze, Firenze, Tuscany, Italy",Female,Birth year increased by exactly 20 years.
+Nightingale-64__wrong_location,Florence Nightingale,wrong_location,Nightingale-64,Florence,Nightingale,1820.0,"Tokyo, Japan",Female,"Birth location replaced with the unrelated location 'Tokyo, Japan'."
+Nightingale-64__wrong_gender,Florence Nightingale,wrong_gender,Nightingale-64,Florence,Nightingale,1820.0,"Firenze, Firenze, Tuscany, Italy",Male,Gender replaced with the opposite dataset value.
+Churchill-4__full_profile,Winston Churchill,full_profile,Churchill-4,Winston,Churchill,1874.0,"Blenheim Palace, Woodstock, Oxfordshire, England",Male,All available identifying fields supplied correctly.
+Churchill-4__name_year,Winston Churchill,name_year,Churchill-4,Winston,Churchill,1874.0,,,"Only first name, surname and birth year supplied."
+Churchill-4__name_only,Winston Churchill,name_only,Churchill-4,Winston,Churchill,,,,Only first name and surname supplied.
+Churchill-4__noisy_input,Winston Churchill,noisy_input,Churchill-4,Winston,Chucrhill,1874.0,"Oxfordshire, England",Male,One adjacent-character surname typo and a shortened birth location.
+Churchill-4__wrong_year,Winston Churchill,wrong_year,Churchill-4,Winston,Churchill,1894.0,"Blenheim Palace, Woodstock, Oxfordshire, England",Male,Birth year increased by exactly 20 years.
+Churchill-4__wrong_location,Winston Churchill,wrong_location,Churchill-4,Winston,Churchill,1874.0,"Tokyo, Japan",Male,"Birth location replaced with the unrelated location 'Tokyo, Japan'."
+Churchill-4__wrong_gender,Winston Churchill,wrong_gender,Churchill-4,Winston,Churchill,1874.0,"Blenheim Palace, Woodstock, Oxfordshire, England",Female,Gender replaced with the opposite dataset value.
+Brunel-8__full_profile,Isambard Kingdom Brunel,full_profile,Brunel-8,Isambard,Brunel,1806.0,"Portsea, Hampshire, England",Male,All available identifying fields supplied correctly.
+Brunel-8__name_year,Isambard Kingdom Brunel,name_year,Brunel-8,Isambard,Brunel,1806.0,,,"Only first name, surname and birth year supplied."
+Brunel-8__name_only,Isambard Kingdom Brunel,name_only,Brunel-8,Isambard,Brunel,,,,Only first name and surname supplied.
+Brunel-8__noisy_input,Isambard Kingdom Brunel,noisy_input,Brunel-8,Isambard,Brnuel,1806.0,"Hampshire, England",Male,One adjacent-character surname typo and a shortened birth location.
+Brunel-8__wrong_year,Isambard Kingdom Brunel,wrong_year,Brunel-8,Isambard,Brunel,1826.0,"Portsea, Hampshire, England",Male,Birth year increased by exactly 20 years.
+Brunel-8__wrong_location,Isambard Kingdom Brunel,wrong_location,Brunel-8,Isambard,Brunel,1806.0,"Tokyo, Japan",Male,"Birth location replaced with the unrelated location 'Tokyo, Japan'."
+Brunel-8__wrong_gender,Isambard Kingdom Brunel,wrong_gender,Brunel-8,Isambard,Brunel,1806.0,"Portsea, Hampshire, England",Female,Gender replaced with the opposite dataset value.
