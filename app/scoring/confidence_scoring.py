@@ -18,6 +18,11 @@ SCORE_COLUMNS = [
 ]
 
 
+GENDER_CONFLICT_PENALTY = 25.0
+VERY_LOW_LOCATION_THRESHOLD = 0.4
+VERY_LOW_LOCATION_PENALTY = 30.0
+
+
 FRONT_COLUMNS = [
     "rank",
     "rank_score",
@@ -154,6 +159,24 @@ def ambiguity_penalty(row: pd, candidates: pd) -> float:
     
     return 15.0
 
+
+def contradiction_penalty(row: pd.Series) -> float:
+    """Penalise supplied evidence that conflicts with the candidate."""
+    penalty = 0.0
+    gender_score = safe_float(row.get("gender_score"))
+    location_score = safe_float(row.get("birth_location_score"))
+
+    if gender_score is not None and gender_score == 0.0:
+        penalty += GENDER_CONFLICT_PENALTY
+
+    if (
+        location_score is not None
+        and location_score < VERY_LOW_LOCATION_THRESHOLD
+    ):
+        penalty += VERY_LOW_LOCATION_PENALTY
+
+    return penalty
+
 def calculate_confidence_score(row: pd, candidates: pd) -> float:
     """
     Convert rank and score into confidence scores
@@ -192,6 +215,7 @@ def calculate_confidence_score(row: pd, candidates: pd) -> float:
 
     # Adding ambiguity penalty to confidence score
     confidence -= ambiguity_penalty(row, candidates)
+    confidence -= contradiction_penalty(row)
     confidence = max(0.0, min(100.0, confidence))
 
     return round(confidence, 2)
@@ -223,10 +247,10 @@ def build_confidence_explanation(row: pd) -> str:
     if location_score is not None:
         if location_score >= 0.5:
             parts.append("strong birth-location match")
-        elif location_score > 0:
+        elif location_score >= VERY_LOW_LOCATION_THRESHOLD:
             parts.append("partial birth-location match")
         else:
-            parts.append("birth location missing or mismatch")
+            parts.append("birth location conflicts with candidate or is missing")
 
     gender_score = safe_float(row.get("gender_score"))
 
@@ -234,7 +258,7 @@ def build_confidence_explanation(row: pd) -> str:
         if gender_score >= 1.0:
             parts.append("gender match")
         else:
-            parts.append("gender mismatch or missing")
+            parts.append("gender conflicts with candidate or is missing")
     
     coverage = evidence_coverage(row)
 
