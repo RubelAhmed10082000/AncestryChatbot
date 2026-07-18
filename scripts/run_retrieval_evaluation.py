@@ -23,6 +23,7 @@ DEFAULT_OUTPUT_DIR = Path("data/evaluation")
 
 TOP_K = 5
 MIN_SCORE = 0.0
+TOP_SCORE_TIE_TOLERANCE = 0.001
 
 RESULTS_FILENAME = "evaluation_results.csv"
 SUMMARY_FILENAME = "evaluation_summary.csv"
@@ -184,6 +185,47 @@ def failure_reason(expected_rank: int | None, candidate_count: int) -> str | Non
     return "expected_candidate_ranked_below_first"
 
 
+def top_score_diagnostics(candidates: pd.DataFrame) -> dict[str, Any]:
+    """Describe the top-score margin and any tie within the fixed tolerance."""
+    diagnostics = {
+        "second_candidate_wikitree_id": None,
+        "second_candidate_rank_score": None,
+        "score_margin": None,
+        "top_score_tie": False,
+        "top_score_tie_size": 0,
+    }
+
+    if candidates.empty:
+        return diagnostics
+
+    rank_scores = pd.to_numeric(candidates["rank_score"], errors="coerce")
+    top_score = value_or_none(rank_scores.iloc[0])
+
+    if top_score is not None:
+        diagnostics["top_score_tie_size"] = int(
+            (rank_scores.sub(float(top_score)).abs() <= TOP_SCORE_TIE_TOLERANCE).sum()
+        )
+
+    if len(candidates) < 2:
+        return diagnostics
+
+    second_candidate = candidates.iloc[1]
+    second_score = value_or_none(rank_scores.iloc[1])
+    diagnostics["second_candidate_wikitree_id"] = clean_optional_text(
+        second_candidate.get("wikitree_id")
+    )
+    diagnostics["second_candidate_rank_score"] = second_score
+
+    if top_score is not None and second_score is not None:
+        score_margin = round(float(top_score) - float(second_score), 6)
+        diagnostics["score_margin"] = score_margin
+        diagnostics["top_score_tie"] = (
+            score_margin <= TOP_SCORE_TIE_TOLERANCE
+        )
+
+    return diagnostics
+
+
 def evaluate_cases(
     retriever: Any,
     cases: pd.DataFrame,
@@ -212,6 +254,7 @@ def evaluate_cases(
 
         candidates = confidence_scorer(candidates)
         candidate_count = len(candidates)
+        score_diagnostics = top_score_diagnostics(candidates)
 
         if candidates.empty:
             expected_rank = None
@@ -229,6 +272,10 @@ def evaluate_cases(
         top_1_correct = expected_rank == 1
         top_3_correct = expected_rank is not None and expected_rank <= 3
         top_5_correct = expected_rank is not None and expected_rank <= 5
+        unique_top_1_correct = (
+            top_1_correct
+            and score_diagnostics["top_score_tie_size"] == 1
+        )
 
         result_row = {
             "case_id": clean_optional_text(case.get("case_id")),
@@ -244,6 +291,7 @@ def evaluate_cases(
             "candidate_count": candidate_count,
             "expected_rank": expected_rank,
             "top_1_correct": top_1_correct,
+            "unique_top_1_correct": unique_top_1_correct,
             "top_3_correct": top_3_correct,
             "top_5_correct": top_5_correct,
             "reciprocal_rank": reciprocal_rank(expected_rank),
@@ -254,6 +302,7 @@ def evaluate_cases(
             "top_confidence_score": None,
             "confidence_interpretation": None,
             "failure_reason": failure_reason(expected_rank, candidate_count),
+            **score_diagnostics,
         }
 
         for column in SCORE_COLUMNS:
@@ -298,6 +347,24 @@ def mean_or_none(series: pd.Series) -> float | None:
     return round(float(values.mean()), 6)
 
 
+def minimum_or_none(series: pd.Series) -> float | None:
+    """Return a rounded numeric minimum, preserving an empty group as missing."""
+    values = pd.to_numeric(series, errors="coerce").dropna()
+
+    if values.empty:
+        return None
+
+    return round(float(values.min()), 6)
+
+
+def rate_or_none(series: pd.Series) -> float | None:
+    """Return a rounded boolean rate, preserving an empty group as missing."""
+    if series.empty:
+        return None
+
+    return round(float(series.mean()), 6)
+
+
 def result_groups(results: pd.DataFrame):
     """Yield the overall result set followed by each condition in fixed order."""
     yield "overall", "all", results
@@ -313,16 +380,28 @@ def build_evaluation_summary(results: pd.DataFrame) -> pd.DataFrame:
     for scope, condition, group in result_groups(results):
         correct_top = group[group["top_1_correct"]]
         incorrect_top = group[~group["top_1_correct"]]
+        exact_tie_count = int(group["top_score_tie"].sum())
 
         summary_rows.append(
             {
                 "scope": scope,
                 "condition": condition,
                 "total_cases": len(group),
-                "top_1_accuracy": round(float(group["top_1_correct"].mean()), 6),
-                "top_3_accuracy": round(float(group["top_3_correct"].mean()), 6),
-                "top_5_accuracy": round(float(group["top_5_correct"].mean()), 6),
+                "top_1_accuracy": rate_or_none(group["top_1_correct"]),
+                "unique_top_1_accuracy": rate_or_none(
+                    group["unique_top_1_correct"]
+                ),
+                "top_3_accuracy": rate_or_none(group["top_3_correct"]),
+                "top_5_accuracy": rate_or_none(group["top_5_correct"]),
                 "mean_reciprocal_rank": mean_or_none(group["reciprocal_rank"]),
+                "exact_tie_count": exact_tie_count,
+                "exact_tie_rate": (
+                    round(exact_tie_count / len(group), 6)
+                    if len(group)
+                    else None
+                ),
+                "mean_score_margin": mean_or_none(group["score_margin"]),
+                "minimum_score_margin": minimum_or_none(group["score_margin"]),
                 "mean_confidence": mean_or_none(group["top_confidence_score"]),
                 "mean_confidence_correct_top_1": mean_or_none(
                     correct_top["top_confidence_score"]
@@ -453,9 +532,15 @@ def main() -> None:
     print("Retrieval evaluation complete.")
     print(f"Cases evaluated: {len(results)}")
     print(f"Top-1 accuracy: {overall['top_1_accuracy']:.4f}")
+    print(
+        "Unique Top-1 accuracy: "
+        f"{overall['unique_top_1_accuracy']:.4f}"
+    )
     print(f"Top-3 accuracy: {overall['top_3_accuracy']:.4f}")
     print(f"Top-5 accuracy: {overall['top_5_accuracy']:.4f}")
     print(f"Mean reciprocal rank: {overall['mean_reciprocal_rank']:.4f}")
+    print(f"Exact top-score ties: {int(overall['exact_tie_count'])}")
+    print(f"Mean score margin: {overall['mean_score_margin']:.4f}")
     print(f"Failed retrievals: {int(overall['failed_retrieval_count'])}")
     print("Outputs:")
 

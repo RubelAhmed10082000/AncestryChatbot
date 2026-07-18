@@ -106,13 +106,41 @@ def test_evaluate_cases_uses_frozen_parameters_and_calculates_rank():
     assert ranked_below_first["top_3_correct"]
     assert ranked_below_first["reciprocal_rank"] == 0.5
     assert ranked_below_first["returned_top_wikitree_id"] == "Other-1"
+    assert ranked_below_first["second_candidate_wikitree_id"] == "Austen-489"
+    assert ranked_below_first["second_candidate_rank_score"] == 85.0
+    assert ranked_below_first["score_margin"] == 5.0
+    assert not ranked_below_first["top_score_tie"]
+    assert ranked_below_first["top_score_tie_size"] == 1
+    assert not ranked_below_first["unique_top_1_correct"]
     assert ranked_below_first["top_confidence_score"] == 88.0
     assert ranked_below_first["failure_reason"] == "expected_candidate_ranked_below_first"
 
     missing = results.iloc[1]
     assert pd.isna(missing["expected_rank"])
     assert missing["retrieval_failed"]
+    assert missing["top_score_tie_size"] == 0
+    assert not missing["unique_top_1_correct"]
     assert missing["failure_reason"] == "no_candidates_returned"
+
+
+def test_unique_top_1_correct_is_false_when_top_score_is_tied():
+    tied_candidates = candidate_rows()
+    tied_candidates.loc[:, "rank_score"] = [90.0, 90.0]
+    tied_candidates.loc[:, "wikitree_id"] = ["Austen-489", "Austen-1465"]
+    retriever = FakeRetriever([tied_candidates])
+
+    result = evaluation.evaluate_cases(
+        retriever,
+        make_cases().iloc[[0]],
+        confidence_scorer=fake_add_confidence_scores,
+    ).iloc[0]
+
+    assert result["expected_rank"] == 1
+    assert result["top_1_correct"]
+    assert result["top_score_tie"]
+    assert result["top_score_tie_size"] == 2
+    assert result["score_margin"] == 0.0
+    assert not result["unique_top_1_correct"]
 
 
 def test_build_evaluation_summary_calculates_required_metrics():
@@ -121,32 +149,41 @@ def test_build_evaluation_summary_calculates_required_metrics():
             {
                 "condition": "full_profile",
                 "top_1_correct": True,
+                "unique_top_1_correct": True,
                 "top_3_correct": True,
                 "top_5_correct": True,
                 "reciprocal_rank": 1.0,
                 "top_confidence_score": 90.0,
                 "retrieval_failed": False,
                 "candidate_count": 5,
+                "top_score_tie": False,
+                "score_margin": 10.0,
             },
             {
                 "condition": "full_profile",
                 "top_1_correct": False,
+                "unique_top_1_correct": False,
                 "top_3_correct": True,
                 "top_5_correct": True,
                 "reciprocal_rank": 0.5,
                 "top_confidence_score": 80.0,
                 "retrieval_failed": False,
                 "candidate_count": 5,
+                "top_score_tie": True,
+                "score_margin": 0.0,
             },
             {
                 "condition": "full_profile",
                 "top_1_correct": False,
+                "unique_top_1_correct": False,
                 "top_3_correct": False,
                 "top_5_correct": False,
                 "reciprocal_rank": 0.0,
                 "top_confidence_score": 70.0,
                 "retrieval_failed": True,
                 "candidate_count": 5,
+                "top_score_tie": False,
+                "score_margin": 5.0,
             },
         ]
     )
@@ -155,6 +192,7 @@ def test_build_evaluation_summary_calculates_required_metrics():
 
     assert overall["total_cases"] == 3
     assert overall["top_1_accuracy"] == pytest.approx(1 / 3, abs=1e-6)
+    assert overall["unique_top_1_accuracy"] == pytest.approx(1 / 3, abs=1e-6)
     assert overall["top_3_accuracy"] == pytest.approx(2 / 3, abs=1e-6)
     assert overall["top_5_accuracy"] == pytest.approx(2 / 3, abs=1e-6)
     assert overall["mean_reciprocal_rank"] == 0.5
@@ -162,6 +200,10 @@ def test_build_evaluation_summary_calculates_required_metrics():
     assert overall["mean_confidence_correct_top_1"] == 90.0
     assert overall["mean_confidence_incorrect_top_1"] == 75.0
     assert overall["failed_retrieval_count"] == 1
+    assert overall["exact_tie_count"] == 1
+    assert overall["exact_tie_rate"] == pytest.approx(1 / 3, abs=1e-6)
+    assert overall["mean_score_margin"] == 5.0
+    assert overall["minimum_score_margin"] == 0.0
 
 
 def test_failure_cases_include_every_incorrect_top_rank():
