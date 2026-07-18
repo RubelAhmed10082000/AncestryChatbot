@@ -219,3 +219,53 @@ def test_failure_cases_include_every_incorrect_top_rank():
 
     assert failures["case_id"].tolist() == ["rank_two", "absent"]
     assert failures["first_name_score"].tolist() == [0.8, 0.3]
+
+
+def test_ambiguity_cases_include_ties_and_low_margin_correct_results():
+    results = pd.DataFrame(
+        [
+            {
+                "case_id": "unique_clear",
+                "top_1_correct": True,
+                "unique_top_1_correct": True,
+                "score_margin": 20.0,
+            },
+            {
+                "case_id": "exact_tie",
+                "top_1_correct": True,
+                "unique_top_1_correct": False,
+                "score_margin": 0.0,
+            },
+            {
+                "case_id": "fragile_correct",
+                "top_1_correct": True,
+                "unique_top_1_correct": True,
+                "score_margin": 0.22,
+            },
+            {
+                "case_id": "incorrect_top",
+                "top_1_correct": False,
+                "unique_top_1_correct": False,
+                "score_margin": 12.0,
+            },
+        ]
+    )
+
+    analysis_cases = evaluation.build_ambiguity_cases(results)
+
+    assert analysis_cases["case_id"].tolist() == [
+        "exact_tie",
+        "fragile_correct",
+        "incorrect_top",
+    ]
+    assert set(analysis_cases["retrieval_analysis_class"]) == {
+        "ambiguous_or_fragile_retrieval"
+    }
+    assert analysis_cases.set_index("case_id").loc[
+        "exact_tie",
+        "ambiguity_reasons",
+    ] == "non_unique_top_1;score_margin_below_5"
+    assert analysis_cases.set_index("case_id").loc[
+        "fragile_correct",
+        "ambiguity_reasons",
+    ] == "score_margin_below_5"

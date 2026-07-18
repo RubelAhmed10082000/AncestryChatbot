@@ -24,10 +24,12 @@ DEFAULT_OUTPUT_DIR = Path("data/evaluation")
 TOP_K = 5
 MIN_SCORE = 0.0
 TOP_SCORE_TIE_TOLERANCE = 0.001
+AMBIGUITY_MARGIN_THRESHOLD = 5.0
 
 RESULTS_FILENAME = "evaluation_results.csv"
 SUMMARY_FILENAME = "evaluation_summary.csv"
 FAILURES_FILENAME = "failure_cases.csv"
+AMBIGUITY_CASES_FILENAME = "ambiguity_cases.csv"
 CONFIDENCE_SUMMARY_FILENAME = "confidence_summary.csv"
 
 EXPECTED_CONDITIONS = (
@@ -422,6 +424,44 @@ def build_failure_cases(results: pd.DataFrame) -> pd.DataFrame:
     return results.loc[~results["top_1_correct"]].reset_index(drop=True)
 
 
+def ambiguity_reasons(row: pd.Series) -> str:
+    """Explain why a result needs ambiguity or retrieval-fragility analysis."""
+    reasons = []
+
+    if not row["top_1_correct"]:
+        reasons.append("incorrect_top_1")
+
+    if not row["unique_top_1_correct"]:
+        reasons.append("non_unique_top_1")
+
+    score_margin = pd.to_numeric(row.get("score_margin"), errors="coerce")
+
+    if pd.notna(score_margin) and score_margin < AMBIGUITY_MARGIN_THRESHOLD:
+        reasons.append("score_margin_below_5")
+
+    return ";".join(reasons)
+
+
+def build_ambiguity_cases(results: pd.DataFrame) -> pd.DataFrame:
+    """Return ambiguous or fragile retrievals without calling them failures."""
+    score_margins = pd.to_numeric(results["score_margin"], errors="coerce")
+    analysis_mask = (
+        (~results["top_1_correct"])
+        | (~results["unique_top_1_correct"])
+        | (score_margins < AMBIGUITY_MARGIN_THRESHOLD)
+    )
+    analysis_cases = results.loc[analysis_mask].copy()
+    analysis_cases["retrieval_analysis_class"] = (
+        "ambiguous_or_fragile_retrieval"
+    )
+    analysis_cases["ambiguity_reasons"] = analysis_cases.apply(
+        ambiguity_reasons,
+        axis=1,
+    )
+
+    return analysis_cases.reset_index(drop=True)
+
+
 def confidence_statistics(group: pd.DataFrame) -> dict[str, Any]:
     """Summarise available top-candidate confidence scores for one group."""
     scores = pd.to_numeric(group["top_confidence_score"], errors="coerce").dropna()
@@ -473,19 +513,24 @@ def write_outputs(
     results: pd.DataFrame,
     output_dir: Path = DEFAULT_OUTPUT_DIR,
 ) -> dict[str, Path]:
-    """Build and write the four formal evaluation output files."""
+    """Build and write the formal evaluation output files."""
     output_dir.mkdir(parents=True, exist_ok=True)
 
     outputs = {
         "results": output_dir / RESULTS_FILENAME,
         "summary": output_dir / SUMMARY_FILENAME,
         "failures": output_dir / FAILURES_FILENAME,
+        "ambiguity_cases": output_dir / AMBIGUITY_CASES_FILENAME,
         "confidence_summary": output_dir / CONFIDENCE_SUMMARY_FILENAME,
     }
 
     results.to_csv(outputs["results"], index=False)
     build_evaluation_summary(results).to_csv(outputs["summary"], index=False)
     build_failure_cases(results).to_csv(outputs["failures"], index=False)
+    build_ambiguity_cases(results).to_csv(
+        outputs["ambiguity_cases"],
+        index=False,
+    )
     build_confidence_summary(results).to_csv(
         outputs["confidence_summary"],
         index=False,
