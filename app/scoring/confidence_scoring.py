@@ -133,30 +133,44 @@ def name_quality(row: pd) -> str:
 
 def ambiguity_penalty(row: pd, candidates: pd) -> float:
     """
-    Calculates penalty for profiles that multiple close candidate matches
+    Calculate ambiguity from the nearest competing candidate score.
     Args - 
         row(pd): row of data containing similarity of candidates ranked
         candidates(Any): containes candidate data
     Returns -
         float: penalty 0 - 15
     """
-    rank = safe_float(row.get("rank"))
+    candidate_score = safe_float(row.get("rank_score"))
 
-    if rank != 1 or len(candidates) < 2:
+    if candidate_score is None or len(candidates) < 2:
         return 0.0
 
-    top_score = safe_float(candidates.iloc[0].get("rank_score")) or 0.0
-    second_score = safe_float(candidates.iloc[1].get("rank_score")) or 0.0
-    margin = top_score - second_score
-    
-    # Calculting penalties depending on rank closeness of first place and second place
-    if margin >= 20:
+    competing_scores = []
+
+    for index, candidate in candidates.iterrows():
+        if row.name in candidates.index and index == row.name:
+            continue
+
+        competing_score = safe_float(candidate.get("rank_score"))
+
+        if competing_score is not None:
+            competing_scores.append(competing_score)
+
+    if not competing_scores:
         return 0.0
-    if margin >= 10:
+
+    nearest_difference = min(
+        abs(candidate_score - competing_score)
+        for competing_score in competing_scores
+    )
+
+    if nearest_difference >= 20:
+        return 0.0
+    if nearest_difference >= 10:
         return 5.0
-    if margin >= 5:
+    if nearest_difference >= 5:
         return 10.0
-    
+
     return 15.0
 
 
@@ -177,6 +191,30 @@ def contradiction_penalty(row: pd.Series) -> float:
 
     return penalty
 
+
+def has_direct_contradiction(row: pd.Series) -> bool:
+    """Return whether any supplied evidence directly conflicts with a candidate."""
+    location_score = safe_float(row.get("birth_location_score"))
+
+    if (
+        location_score is not None
+        and location_score < VERY_LOW_LOCATION_THRESHOLD
+    ):
+        return True
+
+    for column in (
+        "first_name_score",
+        "last_name_score",
+        "birth_year_score",
+        "gender_score",
+    ):
+        score = safe_float(row.get(column))
+
+        if score is not None and score == 0.0:
+            return True
+
+    return False
+
 def calculate_confidence_score(row: pd, candidates: pd) -> float:
     """
     Convert rank and score into confidence scores
@@ -185,10 +223,16 @@ def calculate_confidence_score(row: pd, candidates: pd) -> float:
 
     coverage = evidence_coverage(row)
     evidence_strength = strong_evidence_ratio(row)
+    direct_contradiction = has_direct_contradiction(row)
+    direct_contradiction_penalty = contradiction_penalty(row)
 
 
     # Confidence increases if coverage score is high, penalised if low
-    if coverage >= 0.8 and evidence_strength >= 0.8:
+    if (
+        coverage >= 0.8
+        and evidence_strength >= 0.8
+        and not direct_contradiction
+    ):
         confidence += 5
     elif coverage <= 0.4:
         confidence -= 20
@@ -215,7 +259,7 @@ def calculate_confidence_score(row: pd, candidates: pd) -> float:
 
     # Adding ambiguity penalty to confidence score
     confidence -= ambiguity_penalty(row, candidates)
-    confidence -= contradiction_penalty(row)
+    confidence -= direct_contradiction_penalty
     confidence = max(0.0, min(100.0, confidence))
 
     return round(confidence, 2)
@@ -263,7 +307,10 @@ def build_confidence_explanation(row: pd) -> str:
     coverage = evidence_coverage(row)
 
     if coverage >= 0.8:
-        parts.append("high evidence coverage")
+        if has_direct_contradiction(row):
+            parts.append("high evidence coverage with contradictory evidence")
+        else:
+            parts.append("high evidence coverage")
     elif coverage >= 0.6:
         parts.append("moderate evidence coverage")
     else:

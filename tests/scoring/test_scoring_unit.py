@@ -178,7 +178,7 @@ def test_name_quality_weak_match():
 
 ### Testing Ambiguity_Penalty ###
 
-def test_ambiguity_penalty_no_penalty_when_not_rank_one():
+def test_ambiguity_penalty_applies_to_non_top_candidate():
     candidates = pd.DataFrame(
         [
             {"rank": 1, "rank_score": 95},
@@ -186,9 +186,41 @@ def test_ambiguity_penalty_no_penalty_when_not_rank_one():
         ]
     )
 
-    row = pd.Series({"rank": 2, "rank_score": 90})
+    row = candidates.iloc[1]
 
-    assert confidence_scoring.ambiguity_penalty(row, candidates) == 0.0
+    assert confidence_scoring.ambiguity_penalty(row, candidates) == 10.0
+
+
+def test_exact_tied_candidates_both_receive_ambiguity_penalties():
+    candidates = pd.DataFrame(
+        [
+            {
+                "rank": 1,
+                "rank_score": 100,
+                "first_name_score": 1.0,
+                "last_name_score": 1.0,
+                "birth_year_score": 1.0,
+                "birth_location_score": None,
+                "gender_score": None,
+            },
+            {
+                "rank": 2,
+                "rank_score": 100,
+                "first_name_score": 1.0,
+                "last_name_score": 1.0,
+                "birth_year_score": 1.0,
+                "birth_location_score": None,
+                "gender_score": None,
+            },
+        ]
+    )
+
+    assert confidence_scoring.ambiguity_penalty(candidates.iloc[0], candidates) == 15.0
+    assert confidence_scoring.ambiguity_penalty(candidates.iloc[1], candidates) == 15.0
+
+    scored = confidence_scoring.add_confidence_scores(candidates)
+
+    assert scored["confidence_score"].tolist() == [80.0, 80.0]
 
 
 def test_ambiguity_penalty_no_penalty_when_margin_at_least_20():
@@ -300,7 +332,7 @@ def test_calculate_confidence_score_penalises_birth_year_mismatch():
 
     row = candidates.iloc[0]
 
-    assert confidence_scoring.calculate_confidence_score(row, candidates) == 75.0
+    assert confidence_scoring.calculate_confidence_score(row, candidates) == 70.0
 
 
 def test_calculate_confidence_score_penalises_gender_conflict():
@@ -321,7 +353,8 @@ def test_calculate_confidence_score_penalises_gender_conflict():
     row = candidates.iloc[0]
 
     assert confidence_scoring.contradiction_penalty(row) == 25.0
-    assert confidence_scoring.calculate_confidence_score(row, candidates) == 75.0
+    assert confidence_scoring.has_direct_contradiction(row)
+    assert confidence_scoring.calculate_confidence_score(row, candidates) == 70.0
 
 
 def test_calculate_confidence_score_strongly_penalises_location_conflict():
@@ -342,7 +375,8 @@ def test_calculate_confidence_score_strongly_penalises_location_conflict():
     row = candidates.iloc[0]
 
     assert confidence_scoring.contradiction_penalty(row) == 30.0
-    assert confidence_scoring.calculate_confidence_score(row, candidates) == 65.0
+    assert confidence_scoring.has_direct_contradiction(row)
+    assert confidence_scoring.calculate_confidence_score(row, candidates) == 60.0
 
 
 def test_contradiction_penalty_ignores_unsupplied_fields():
@@ -354,6 +388,7 @@ def test_contradiction_penalty_ignores_unsupplied_fields():
     )
 
     assert confidence_scoring.contradiction_penalty(row) == 0.0
+    assert not confidence_scoring.has_direct_contradiction(row)
 
 
 def test_calculate_confidence_score_penalises_ambiguity_for_close_second_candidate():
@@ -480,7 +515,7 @@ def test_build_confidence_explanation_partial_candidate():
     "weak birth-year match; "
     "birth location conflicts with candidate or is missing; "
     "gender conflicts with candidate or is missing; "
-    "high evidence coverage."
+    "high evidence coverage with contradictory evidence."
 )
 
 def test_build_confidence_explanation_limited_evidence():
