@@ -16,7 +16,6 @@ UNKNOWN_VALUES = {
     "Unknown", "unknown", "UNKNOWN",
 }
 
-# Weights given to attibutes if they are a match
 DEFAULT_WEIGHTS = {
     "first_name_score": 0.25,
     "last_name_score": 0.25,
@@ -477,8 +476,8 @@ def weighted_score(scores: dict, weights: dict) -> float:
     return round((numerator / denominator) * 100, 2)
 
 
-def adjust_score(score: float, scores: dict, query_birth_year: Any, candidate_birth_year: Any, 
-                 query_birth_location: str, candidate_birth_location: str) -> float:
+def adjust_score(score: float, scores: dict, query_birth_year: Any, candidate_birth_year: Any 
+                 ) -> float:
 
     """
     Adjusts scoring for candidate profile based on similarity scores of particular attributes
@@ -530,7 +529,6 @@ def adjust_score(score: float, scores: dict, query_birth_year: Any, candidate_bi
         score -= 20
 
     score = max(0.0, min(100.0, score))
-    # TODO: Explore adjusting scores based on location distance (stretch goal)
     return round(score, 2)
 
 
