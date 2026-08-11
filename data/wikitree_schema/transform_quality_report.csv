@@ -2,10 +2,10 @@ metric,value
 raw_people_rows,131
 schema_people_rows,131
 schema_names_rows,131
-raw_relationship_rows,179
-clean_relationship_rows,179
+raw_relationship_rows,178
+clean_relationship_rows,178
 schema_event_rows,341
-relationship_rejections,72
+relationship_rejections,71
 birth_event_rows,117
 death_event_rows,117
 father_of_event_rows,54

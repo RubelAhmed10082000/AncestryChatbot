@@ -1,0 +1,10 @@
+seed_label,wikitree_id,person_id,first_name,last_name_at_birth,birth_date,birth_location,selection_method
+Samuel Langhorne Clemens / Mark Twain,Clemens-1,5185,Samuel,Clemens,1835-11-30,"Florida, Monroe, Missouri, United States",known_wikitree_id
+Aretha Franklin,Franklin-10478,20674257,Aretha,Franklin,1942-03-25,"Memphis, Shelby, Tennessee, United States",known_wikitree_id
+Charles Darwin,Darwin-15,1523454,Charles,Darwin,1809-02-12,"Shrewsbury, Shropshire, England",exact_birth_date_match
+Jane Austen,Austen-489,5688919,Jane,Austen,1775-12-16,"Steventon, Hampshire, England",exact_birth_date_match
+Isaac Newton,Newton-17,64699,Isaac,Newton,1642-12-25,"Woolsthorpe by Colsterworth, Lincolnshire, England",known_wikitree_id
+William Shakespeare,Shakespeare-1,741,William,Shakespeare,1564-04-23,"Stratford-upon-Avon, Warwickshire, England",first_search_result
+Florence Nightingale,Nightingale-64,1737068,Florence,Nightingale,1820-05-12,"Firenze, Firenze, Tuscany, Italy",exact_birth_date_match
+Winston Churchill,Churchill-4,5589,Winston,Churchill,1874-11-30,"Blenheim Palace, Woodstock, Oxfordshire, England",exact_birth_date_match
+Isambard Kingdom Brunel,Brunel-8,3911332,Isambard,Brunel,1806-04-09,"Portsea, Hampshire, England",exact_birth_date_match

@@ -2,7 +2,6 @@ parent_id,child_id,child_wikitree_id,relationship_type,reason
 1072890,5203,Clemens-11,father_of,parent_or_child_not_present_in_people_csv
 5698775,5203,Clemens-11,mother_of,parent_or_child_not_present_in_people_csv
 4433025,5205,Goggin-2,father_of,parent_or_child_not_present_in_people_csv
-4433506,5205,Goggin-2,mother_of,parent_or_child_not_present_in_people_csv
 769537,5206,Moorman-1,father_of,parent_or_child_not_present_in_people_csv
 772570,5206,Moorman-1,mother_of,parent_or_child_not_present_in_people_csv
 555338,12458388,Lampton-74,father_of,parent_or_child_not_present_in_people_csv

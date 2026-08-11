@@ -25,7 +25,7 @@ af039f2a-210e-5d03-8c3f-efe23322d7c7,d05c2a35-b099-5ac2-86bd-1c1922285814,,death
 6109cf01-7ed1-513f-a2f9-f9b472e4fb5b,cb7b6781-5d39-5514-8913-5a67896a89c8,,death,1790-02-25,2.0,25.0,1790.0,"Crab Orchard, Lincoln County, Kentucky, USA",certain
 ded5ca0d-7da6-5454-a78f-bb11031c4f83,bb6ab397-4df9-55e7-961f-16c964688794,,birth,1744-00-00,,,1744.0,"Saint Georges Parish, Spotsylvania, Virginia",certain
 ca7a8c0e-85ef-5a9a-a674-236d934dacc3,bb6ab397-4df9-55e7-961f-16c964688794,,death,1811-01-26,1.0,26.0,1811.0,"Bourbon, Kentucky, United States",certain
-065fe4ab-4d7a-5eb8-8c53-c7c5beea3d57,62cf8cd8-09a5-5f3e-af35-64618ba1fd80,,birth,1754-00-00,,,1754.0,"Frederick, Virginia, British Colonial America",certain
+065fe4ab-4d7a-5eb8-8c53-c7c5beea3d57,62cf8cd8-09a5-5f3e-af35-64618ba1fd80,,birth,1754-00-00,,,1754.0,"Frederick, Virginia, Colonial America",certain
 2efd48d8-338e-5eb5-8db0-87b8fbe6da9e,62cf8cd8-09a5-5f3e-af35-64618ba1fd80,,death,1816-12-01,12.0,1.0,1816.0,"Adair, Kentucky, United States",certain
 1f36c72f-8396-5849-b52b-c33605a3bd72,5dfae123-2f67-5405-aeb2-9d288bf556e5,,birth,1761-00-00,,,1761.0,,guess
 de1dc681-dfb7-5944-9553-e08c09ad7a1a,5dfae123-2f67-5405-aeb2-9d288bf556e5,,death,1844-00-00,,,1844.0,,certain
@@ -158,13 +158,13 @@ a33118a7-98df-5405-8e6b-36fe1ae2bac0,ec2a0e38-7dd6-55ff-9fa9-161ae9927477,,death
 6e855b72-c3da-5d67-ac7f-f198a1a30c27,d3572cdb-7e09-5fc3-81d4-3a5687cb8080,,death,1561-02-10,2.0,10.0,1561.0,"Snitterfield, Warwickshire, England",before
 aafee233-f205-5593-955a-25f9d447dc84,1d89ff77-0679-5f69-8a6f-5ed720a9d26e,,birth,1498-00-00,,,1498.0,"Aston Cantlow, Warwickshire, England",guess
 f7ef8f7e-7171-50ff-a875-faa7454222b6,1d89ff77-0679-5f69-8a6f-5ed720a9d26e,,death,1548-04-00,4.0,,1548.0,"Wilmcote, Aston Cantlow, Warwickshire, England",before
-764c327c-537d-5cb1-9e82-9b3d0e839a53,3e9bcaed-d797-5ef1-933b-debedeeb88d5,,birth,1759-00-00,,,1759.0,"Cromford, Derbyshire, England",guess
+764c327c-537d-5cb1-9e82-9b3d0e839a53,3e9bcaed-d797-5ef1-933b-debedeeb88d5,,birth,1758-00-00,,,1758.0,"Bonsall, Derbyshire, England",guess
 9461ddd7-86c1-5b04-a699-7d9070bcd479,3e9bcaed-d797-5ef1-933b-debedeeb88d5,,death,1853-03-25,3.0,25.0,1853.0,"Ecclesall, Yorkshire, England",guess
 993cc518-19a5-55a5-acae-0103f7cf6de7,b205bee5-fe8f-53d0-8005-95e8815315a8,,birth,1726-10-12,10.0,12.0,1726.0,"Bonsall, Derbyshire, England",before
 fdabc443-8c35-56b7-8791-ceff58b99f2b,b205bee5-fe8f-53d0-8005-95e8815315a8,,death,1808-03-26,3.0,26.0,1808.0,"Cromford, Derbyshire, England",certain
 f32665f4-2e03-5d53-89e2-ec1396e8ba98,116dd0f0-737d-5ede-994a-cac40ff96c06,,birth,1820-05-12,5.0,12.0,1820.0,"Firenze, Firenze, Tuscany, Italy",certain
 b15b1a63-63a2-53a2-8357-395fb60b6a05,116dd0f0-737d-5ede-994a-cac40ff96c06,,death,1910-08-13,8.0,13.0,1910.0,"Mayfair, Middlesex, England, United Kingdom",certain
-a698639c-c063-5fb0-a111-d1cdac5db45c,8865f6d6-b4d3-5dd8-a957-6b1654e0e759,,birth,1788-00-00,,,1788.0,"Clapham, Surrey, England",guess
+a698639c-c063-5fb0-a111-d1cdac5db45c,8865f6d6-b4d3-5dd8-a957-6b1654e0e759,,birth,1782-05-26,5.0,26.0,1782.0,"Clapham, Surrey, England",certain
 203e0ce0-55a3-5893-a6ea-b138c93d2c62,8865f6d6-b4d3-5dd8-a957-6b1654e0e759,,death,1880-02-02,2.0,2.0,1880.0,"Portman Square, Middlesex, England, United Kingdom",certain
 421e71c3-5655-538d-a3d5-bc03b3a8f9de,799b4559-e9d8-5c75-aa9a-13f9a39c29be,,birth,1733-00-00,,,1733.0,"Bonsall, Derbyshire, England",
 523efbe7-4c6c-5bd9-a12f-f540e425a68d,799b4559-e9d8-5c75-aa9a-13f9a39c29be,,death,1815-01-28,1.0,28.0,1815.0,"Bonsall, Derbyshire, England",certain
