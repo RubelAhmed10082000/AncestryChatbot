@@ -476,7 +476,8 @@ def weighted_score(scores: dict, weights: dict) -> float:
     return round((numerator / denominator) * 100, 2)
 
 
-def adjust_score(score: float, scores: dict, query_birth_year: Any, candidate_birth_year: Any 
+def adjust_score(score: float, scores: dict, query_birth_year: Any, candidate_birth_year: Any, query_birth_location=Any,
+                 candidate_birth_location=Any
                  ) -> float:
 
     """
