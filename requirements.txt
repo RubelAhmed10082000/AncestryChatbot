@@ -5,3 +5,4 @@ pydantic
 jinja2
 uvicorn
 pytest
+httpx
