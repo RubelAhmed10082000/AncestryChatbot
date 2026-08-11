@@ -2,3 +2,5 @@
 /data/
 __pycache__
 data/wikitree_test/people.csv
+.venv
+.pytest_cache
