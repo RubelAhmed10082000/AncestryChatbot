@@ -1,0 +1,16 @@
+source_seed_search,wikitree_id,person_id,first_name,last_name_at_birth,last_name_current,birth_date,birth_location,gender,was_already_searchable
+Samuel Langhorne Clemens / Mark Twain,Clemmons-470,19321948,Samuel,Clemmons,Clemmons,0000-00-00,,Male,True
+Samuel Langhorne Clemens / Mark Twain,Clem-872,33596810,Samuel,Clem,Clem,0000-00-00,,Male,True
+Samuel Langhorne Clemens / Mark Twain,Clements-5705,27673488,Samuel,Clements,Clements,0000-00-00,,Male,True
+Samuel Langhorne Clemens / Mark Twain,Clements-231,1077741,Samuel,Clements,Clements,0000-00-00,,Male,True
+Samuel Langhorne Clemens / Mark Twain,Clements-9864,46652072,Samuel,Clements,Clements,0000-00-00,,Male,True
+Samuel Langhorne Clemens / Mark Twain,Clement-293,1786544,Samuel P,Clement,Clement,0000-00-00,,Male,True
+Jane Austen,Austen-1465,28677854,Jane,Austen,Austen,1775-00-00,"Kippington, Kent, England",Female,True
+Jane Austen,Auten-71,3015340,Jean,Auten,Auten,0000-00-00,,Male,True
+Jane Austen,Ashton-200,2385884,Jane,Ashton,Foljambe,0000-00-00,"Yorkshire, England",Female,True
+Jane Austen,Austin-13545,31909200,Jane,Austin,Sackett,0000-00-00,,Female,True
+Jane Austen,Thomas-57725,34419964,Johanna,Thomas,Austin,0000-00-00,,Female,True
+Jane Austen,UNKNOWN-175361,4578699,Jean,UNKNOWN,Ashton,0000-00-00,,Female,True
+Jane Austen,Brink-635,6100818,Jane,Brink,Austin,0000-00-00,,Female,True
+Isaac Newton,Newton-20487,49246468,Isaac,Newton,Newton,0000-00-00,,Male,True
+Isaac Newton,Newton-12577,28763261,Isaac,Newton,Newton,0000-00-00,,Male,True

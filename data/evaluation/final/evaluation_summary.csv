@@ -1,0 +1,9 @@
+scope,condition,total_cases,top_1_accuracy,unique_top_1_accuracy,top_3_accuracy,top_5_accuracy,mean_reciprocal_rank,exact_tie_count,exact_tie_rate,mean_score_margin,minimum_score_margin,mean_confidence,mean_confidence_correct_top_1,mean_confidence_incorrect_top_1,failed_retrieval_count,no_candidates_count
+overall,all,63,1.0,0.936508,1.0,1.0,1.0,4,0.063492,55.294762,0.0,78.064286,78.064286,,0,0
+condition,full_profile,9,1.0,1.0,1.0,1.0,1.0,0,0.0,71.057778,10.29,100.0,100.0,,0,0
+condition,name_year,9,1.0,0.888889,1.0,1.0,1.0,1,0.111111,57.254444,0.0,93.333333,93.333333,,0,0
+condition,name_only,9,1.0,0.666667,1.0,1.0,1.0,3,0.333333,29.743333,0.0,75.0,75.0,,0,0
+condition,noisy_input,9,1.0,1.0,1.0,1.0,1.0,0,0.0,60.256667,23.18,95.966667,95.966667,,0,0
+condition,wrong_year,9,1.0,1.0,1.0,1.0,1.0,0,0.0,32.398889,0.63,44.447778,44.447778,,0,0
+condition,wrong_location,9,1.0,1.0,1.0,1.0,1.0,0,0.0,61.955556,0.22,58.257778,58.257778,,0,0
+condition,wrong_gender,9,1.0,1.0,1.0,1.0,1.0,0,0.0,74.396667,15.05,79.444444,79.444444,,0,0

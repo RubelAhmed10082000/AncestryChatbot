@@ -1,0 +1,10 @@
+seed_label,root_wikitree_id,tree_generated,error_message,root_correct,root_node_count,expected_node_count,actual_node_count,node_true_positive,node_precision,node_recall,node_f1,expected_edge_count,actual_edge_count,edge_true_positive,edge_precision,edge_recall,edge_f1,direct_parent_recall,generation_accuracy,expected_max_generation,actual_max_generation,generation_limit_respected,exact_node_set,exact_edge_set,exact_tree_match,duplicate_node_count,duplicate_edge_count,orphan_edge_count,self_loop_count,invalid_generation_edge_count,stub_node_count
+Samuel Langhorne Clemens / Mark Twain,Clemens-1,True,,True,1,15,15,15,1.0,1.0,1.0,14,14,14,1.0,1.0,1.0,1.0,1.0,3,3,True,True,True,True,0,0,0,0,0,0
+Aretha Franklin,Franklin-10478,True,,True,1,12,12,12,1.0,1.0,1.0,11,11,11,1.0,1.0,1.0,1.0,1.0,3,3,True,True,True,True,0,0,0,0,0,0
+Charles Darwin,Darwin-15,True,,True,1,15,15,15,1.0,1.0,1.0,14,14,14,1.0,1.0,1.0,1.0,1.0,3,3,True,True,True,True,0,0,0,0,0,0
+Jane Austen,Austen-489,True,,True,1,15,15,15,1.0,1.0,1.0,14,14,14,1.0,1.0,1.0,1.0,1.0,3,3,True,True,True,True,0,0,0,0,0,0
+Isaac Newton,Newton-17,True,,True,1,9,9,9,1.0,1.0,1.0,8,8,8,1.0,1.0,1.0,1.0,1.0,3,3,True,True,True,True,0,0,0,0,0,0
+William Shakespeare,Shakespeare-1,True,,True,1,9,9,9,1.0,1.0,1.0,8,8,8,1.0,1.0,1.0,1.0,1.0,3,3,True,True,True,True,0,0,0,0,0,0
+Florence Nightingale,Nightingale-64,True,,True,1,15,15,15,1.0,1.0,1.0,14,14,14,1.0,1.0,1.0,1.0,1.0,3,3,True,True,True,True,0,0,0,0,0,0
+Winston Churchill,Churchill-4,True,,True,1,15,15,15,1.0,1.0,1.0,14,14,14,1.0,1.0,1.0,1.0,1.0,3,3,True,True,True,True,0,0,0,0,0,0
+Isambard Kingdom Brunel,Brunel-8,True,,True,1,11,11,11,1.0,1.0,1.0,10,10,10,1.0,1.0,1.0,1.0,1.0,3,3,True,True,True,True,0,0,0,0,0,0
