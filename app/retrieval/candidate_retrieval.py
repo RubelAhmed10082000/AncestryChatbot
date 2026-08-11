@@ -205,8 +205,7 @@ class CandidateRetriever:
 
             # creating scoring scoring weights
             rank_score = weighted_score(scores, self.weights)
-            rank_score = adjust_score(rank_score, scores, birth_year, candidate.get("Birth_Year"), 
-                                      birth_location, candidate.get("Birth_Location"))
+            rank_score = adjust_score(rank_score, scores, birth_year, candidate.get("Birth_Year"))
 
             if rank_score < min_score:
                 continue
@@ -476,9 +475,7 @@ def weighted_score(scores: dict, weights: dict) -> float:
     return round((numerator / denominator) * 100, 2)
 
 
-def adjust_score(score: float, scores: dict, query_birth_year: Any, candidate_birth_year: Any, query_birth_location=Any,
-                 candidate_birth_location=Any
-                 ) -> float:
+def adjust_score(score: float, scores: dict, query_birth_year: Any, candidate_birth_year: Any):
 
     """
     Adjusts scoring for candidate profile based on similarity scores of particular attributes

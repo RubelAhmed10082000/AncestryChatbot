@@ -162,8 +162,6 @@ def test_adjust_score_boosts():
         scores=scores,
         query_birth_year=1775,
         candidate_birth_year=1775,
-        query_birth_location="Steventon",
-        candidate_birth_location="Steventon",
     )
 
     assert result == 96.0
@@ -182,8 +180,6 @@ def test_adjust_score_penalises_large_year_gap():
         scores=scores,
         query_birth_year=1775,
         candidate_birth_year=1820,
-        query_birth_location="Steventon",
-        candidate_birth_location="Steventon",
     )
 
     assert result == 55.0
@@ -202,8 +198,6 @@ def test_adjust_score_penalises_weak_first_name():
         scores=scores,
         query_birth_year=None,
         candidate_birth_year=1775,
-        query_birth_location=None,
-        candidate_birth_location="Steventon",
     )
 
     assert result == 60.0
@@ -222,8 +216,6 @@ def test_adjust_score_is_clamped_between_zero_and_100():
         scores=scores,
         query_birth_year=1775,
         candidate_birth_year=1900,
-        query_birth_location="Steventon",
-        candidate_birth_location="London",
     )
 
     assert result == 0.0
