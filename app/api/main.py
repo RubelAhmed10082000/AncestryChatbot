@@ -1,4 +1,3 @@
-from fastapi import FastAPI, HTTPException, Query
 from app.api.schema import CandidateSearchRequest, CandidateSearchResponse
 from app.api.services import search_candidate, tree
 from fastapi import FastAPI, HTTPException, Query, Request
