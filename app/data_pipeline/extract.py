@@ -1,3 +1,12 @@
+"""
+Extract profiles and ancestor relationships from WikiTree.
+
+The module searches for  seed profiles, retrieves their
+ancestors, flattens them and writes the extracted people and relationships to disk.
+
+API responses stored so extraction is traceable
+"""
+
 import json
 import time
 from pathlib import Path
@@ -5,21 +14,14 @@ import pandas as pd
 import requests
 from typing import Any 
 
-# URL from which we will make our API requests to
 BASE_URL = "https://api.wikitree.com/api.php"
-# Making requests to WikiTree API requires an APPID
 APP_ID = "AncestryChatbotMSc"
-# We are going to upload key metrics from our call to this file 
 OUTPUT_DIR = Path("data/wikitree_test")
 
-# Specifies the amount of generations back from a particular figure we want to search for
-# For now it will be three but it can be adjusted in the CLI
 ANCESTOR_DEPTH = 3
-# Delaying requests in order to limit rate limiting or throttling 
 REQUEST_DELAY_SECONDS = 1.0
 
-# Preliminary seed figures - these are some of the most famous and most well documented figures on WikiTree
-# Will be used to validate our system
+# Historical figures used to produce for evaluation dataset
 SEED_FIGURES = [
     {
         "label": "Samuel Langhorne Clemens / Mark Twain",
@@ -86,7 +88,7 @@ SEED_FIGURES = [
     },
 ]
 
-# These are the fields we are going to request data form  
+# WikiTree fields used by transformation and retrieval modules
 FIELDS = ",".join([
     "Id",
     "Name",
@@ -106,16 +108,16 @@ FIELDS = ",".join([
 ])
 
 
-def call_wikitree(params: dict[str]) -> dict[str | Any]:
-    """
-    Retrieves data from WikiTree for a specific set of paramters 
-    Designed to be passed in other functions
+def call_wikitree(params: dict[str | list]) -> dict[str, Any]:
+    """Send request to WikiTree API and returns JSON response
+
+    Adds ApplicationID to every request so caller only need to worry about parameters
     Args -
         Params(dict): Fields that we want data from
     Returns - 
-        response.json: JSON object with fields and values 
+        Decoded JSON response 
     """
-    # Turning params into a dict just in case
+    # Turning params into a dict to prevent mutation when application id is added 
     params = dict(params)
     # Adding APP_ID to our parameters to reduce rate limiting and gain other benefits
     params["appId"] = APP_ID
@@ -127,13 +129,14 @@ def call_wikitree(params: dict[str]) -> dict[str | Any]:
     return response.json()
 
 
-def search_person(seed: dict[str | Any]) -> dict[str]:
-    """
-    Calls WikiAPI for one specific person using SearchPerson call
+def search_person(seed: dict[str, Any]) -> dict[str, Any]:
+    """Search WikiTree for profiles matching a seed figure
+
+    First name and last name always provided while DOB added if available
     Args -
-        seed(dict): The person we want to search
+        seed(dict): Seed profile which contains biographical data
     Returns -
-        response.json: JSON fields and values
+        WikiTree search response
     """
     # Sets parameters to be used in call_wikitree function
     params = {
@@ -154,16 +157,20 @@ def search_person(seed: dict[str | Any]) -> dict[str]:
 
 def get_ancestors(profile_key: str, depth: int=ANCESTOR_DEPTH):
     """
-    Retrieves ancestors of a particular profile (person) using WikiTree getAncestors function
+    Retrieves ancestors of a particular profile (person) until a certain depth
+
+    
+    WikiTree ``getPeople`` action is called with the ``ancestors`` parameter
+    so that root and ancestors are returned together.
 
     Args -
-        profile_key: name of the person you want ancestors for 
+        profile_key: WikiTreeID  of root profile
         depth: How far down the family tree you want to get ancestors for
 
     Returns -
-        response.json: JSON object with fields and values of ancestor 
+        WikiTree API response
     """
-    # Creating params for ancestor of profile
+    # Creating params for ancestor of profile using WikiTree getPeople action
     params = {
         "action": "getPeople",
         "keys": profile_key,
@@ -176,10 +183,13 @@ def get_ancestors(profile_key: str, depth: int=ANCESTOR_DEPTH):
 
 def add_profile(profiles: list, value: dict) -> None:
     """
-    Helper function that appends ID or name to profile
+    Helper function that appends WikiTreeID or name to profile
+
+    Profile  needs to contain WikiTree ID or name
+
 
     Args -
-        profiles (list): List of dicts - contians fields and values for specific person
+        profiles (list): List of dicts - contains fields and values for specific person
         value (dict): value that will be appended to profiles if it contains identifier field
     
     Returns -
@@ -191,12 +201,16 @@ def add_profile(profiles: list, value: dict) -> None:
     if "Id" in value or "Name" in value:
         profiles.append(value)
 
-def flatten_api_profiles(api_response: dict[str | Any]) -> list:
+def flatten_api_profiles(api_response: dict[str | Any]) -> list[dict]:
     """
-    Turns API response into flattened list
+    Turns API response into flattened list of dicts
+
+    WikiTree responses can return profiles under `profile`, `people`,
+    `matches` or `ancestors`. This helper normalises these fields into
+    one list that can be used by the rest of the extraction pipeline.
     
     Args - 
-        api_reponse (json): json response object returned by call_wikitree()  
+        api_reponse (dict): json response object returned by call_wikitree()  
     Returns -
         list: flattened list of fields and values
     """
@@ -240,25 +254,34 @@ def flatten_api_profiles(api_response: dict[str | Any]) -> list:
 
     return profiles
 
-def choose_best_search_match(seed: dict, search_response: dict[str | Any]) -> None:
+def choose_best_search_match(seed: dict, search_response: 
+                             dict[str, Any]) -> dict[str, Any] | None:
     """
-    Selects the best complete WikiTree profile for a seed figure.
+    Selects the best complete WikiTree profile for a root figure.
+
+    Selection based on this priority: 
+    
+    1. Use WikiTreeID if available
+    2. Exact date of birth match
+    3. Use first search result returned by WikiTree API
+
     Args - 
         seed(dict): seed profile chosen to be matched
-        search_response(json): JSON respone of profile returned by call_wikitree()
+        search_response(dict): JSON respone of profile returned by call_wikitree()
     Returns - 
-        List: Profile that is best match to seed profile
+        Profile that is best match to seed profile or None
     """
 
     matches = flatten_api_profiles(search_response)
     known_wikitree_id = seed.get("known_wikitree_id")
 
-    # Storing all profiles that match the WikiTreedID
+    # Storing all profiles that match the WikiTreeID if one exists
     if known_wikitree_id:
         for match in matches:
             if match.get("Name") == known_wikitree_id:
                     selected = dict(match)
                     selected["SeedLabel"] = seed["label"]
+                    # Recording why each profile was selected
                     selected["SelectionMethod"] = "known_wikitree_id"
                     return selected
         return {
@@ -272,7 +295,7 @@ def choose_best_search_match(seed: dict, search_response: dict[str | Any]) -> No
     
     birth_date = seed.get("birth_date")
     
-    # if there is no match with names we can match based on date of birt
+    # if there is no match with WikiTreeID we can match based on date of birth
     if birth_date:
         for match in matches:
             if match.get("BirthDate") == birth_date:
@@ -293,6 +316,10 @@ def enrich_selected_profile(
 ) -> dict[str, Any]:
     """
     Adds extra data to profiles that have missing data using ancestors 
+
+    Search results can contain fewer fields than records returned by ``getPeople``.
+    When the selected WikiTree ID appears in the ancestor response, the fuller
+    record is used.
     """
     profile_key = selected.get("Name")
 
@@ -308,12 +335,12 @@ def enrich_selected_profile(
 
     return selected
 
-def normalise_person(profile: list) -> dict:
+def normalise_person(profile: dict[str, Any]) -> dict[str, Any]:
     """
-    Normalizing profile to fit schema
+    Normalizing WikiTree API response to fit extraction schema
 
     Args:
-        profile(list): Flattened profile of person
+        profile(dict): Flattened profile of person
     Return:
         dict: Dictionary with fields and values of person
     """
@@ -349,17 +376,17 @@ def add_search_candidates(
     people_by_wikitree_id: dict[str, dict],
     excluded_wikitree_ids: set[str] | None = None,
 ) -> list[str]:
-    """Add non-root search matches as searchable hard-negative candidates.
+    """Add non-root matches as searchable candidates.
 
-    Existing people are never overwritten because ancestor responses usually
-    contain more complete profiles than search responses.
+    Existing people are not overwritten as they can contain more 
+    complete profiles than search responses.
     """
     excluded_wikitree_ids = excluded_wikitree_ids or set()
     added_wikitree_ids = []
 
     for profile in flatten_api_profiles(search_response):
         wikitree_id = profile.get("Name")
-
+        # We skip if WikiTree ID is invalid for any reason 
         if (
             not wikitree_id
             or wikitree_id in excluded_wikitree_ids
@@ -373,9 +400,14 @@ def add_search_candidates(
     return added_wikitree_ids
 
 
-def extract_relationships(profile: list) -> list:
+def extract_relationships(profile: dict[str, Any],
+) -> list[dict[str, Any]]:
     """
-    Extracts relationships from profile
+    Extracts parent records from WikiTree parent reference
+
+    WikiTree stores `Father` and ``Mother`` ID on child profile.
+    Converts  references into `father_of` and `mother_of`
+    records.
 
     Args -
         profile: Flattened list of historical profiles
@@ -413,6 +445,7 @@ def extract_relationships(profile: list) -> list:
 
 
 def save_json(path, data):
+    """Write JSON data to disk."""
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
@@ -438,7 +471,11 @@ def save_outputs(raw_search_results, raw_ancestor_results, selected_seeds, peopl
 
 def make_seed_row(label: str, selected: dict) -> dict:
     """
-    Creates
+    Creates seed profile record for evaluation
+
+    Args -
+        label(str): Label for seed figures
+        selected(dict): selected WikiTree profile
     """
     return {
         "seed_label": label,
@@ -454,8 +491,14 @@ def make_seed_row(label: str, selected: dict) -> dict:
 
 
 def process_seed(seed, raw_search_results, raw_ancestor_results, selected_seeds, people_by_wikitree_id, relationships):
-    """
-    Runs all extraction functions and saves output
+    """Run the extraction function for one seed figure.
+
+    Searches for the seed, selects the WikiTree profile,
+    retrieves its ancestors, stores the raw responses, normalises people and
+    relationships and adds alternative search matches to the candidate
+    dataset.
+
+    The data are updated in place 
     """
     label = seed["label"]
     print(f"\nSearching seed: {label}")
