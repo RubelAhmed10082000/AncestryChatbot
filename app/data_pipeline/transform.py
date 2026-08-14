@@ -1,7 +1,16 @@
+"""
+Transform WikiTree data into relational schema.
+
+The module reads the people and relationship records produced by the
+extraction module, cleans and normalises their values, and creates Person,
+Name and Event tables.
+"""
+
 import json
 import re
 import uuid
 from pathlib import Path
+from typing import Any
 import pandas as pd
 
 
@@ -79,7 +88,18 @@ PEOPLE_INPUT_COLUMNS = [
 RELATIONSHIP_INPUT_COLUMNS = ["parent_id", "child_id", "child_wikitree_id", "relationship_type"]
 
 
-def clean_text(value):
+def clean_text(value: Any) -> str | None:
+    """Normalise a text value and convert unknown values to None.
+
+    Removes whitespace.
+
+    Args:
+        value: Raw value to clean.
+
+    Returns:
+        A cleaned string, or None when the value is missing or unknown
+    """
+     
     if value is None:
         return None
 
@@ -96,7 +116,10 @@ def clean_text(value):
     return text or None
 
 # cleaning ID field
-def clean_id(value):
+def clean_id(value: Any) -> str | None:
+    """
+    Turns source identifier into string and removes zeros
+    """
     text = clean_text(value)
     if text is None:
         return None
@@ -107,7 +130,7 @@ def clean_id(value):
     return text
 
 
-def normalise_gender(value):
+def normalise_gender(value: Any) -> str | None:
     text = clean_text(value)
     if text is None:
         return None
@@ -122,18 +145,28 @@ def normalise_gender(value):
     return "Unknown"
 
 
-def clean_location(value):
+def clean_location(value: Any) -> str | None:
     text = clean_text(value)
     if text is None:
         return None
 
+    # normalising location values
     text = text.replace(" ,", ",")
     text = re.sub(r"\s*,\s*", ", ", text)
     text = re.sub(r"\s+", " ", text)
     return text or None
 
 
-def parse_date_parts(value):
+def parse_date_parts(
+    value: Any,
+) -> tuple[str | None, int | None, int | None, int | None]:
+    """Extracts and parses available day, month and year from dates
+
+    Can parse either complete or  incomplete ISO date formats using regex
+    
+    Args - 
+        value: date value
+    """
     raw = clean_text(value)
     if raw is None:
         return None, None, None, None
@@ -164,7 +197,9 @@ def parse_date_parts(value):
     return raw, year, month, day
 
 
-def parse_data_status(value):
+def parse_data_status(value: Any) -> dict[str, Any]:
+    """ Parses and records data-status metadata 
+    """
     text = clean_text(value)
     if text is None:
         return {}
@@ -180,7 +215,12 @@ def parse_data_status(value):
     return {}
 
 
-def status_for_field(row, field_name):
+def status_for_field(
+    row: pd.Series,
+    field_name: str,
+) -> str | None:
+    """Parses metadata for fields  
+    """
     # Cleaning data status field if exists
     data_status = row.get("_parsed_data_status")
     if not isinstance(data_status, dict):
@@ -189,40 +229,59 @@ def status_for_field(row, field_name):
     return clean_text(data_status.get(field_name))
 
 
-def stable_uuid(entity_type, natural_key):
-    # Establishing a sable UUID
+def stable_uuid(entity_type: str, natural_key: str) -> str:
+    """Generate UUID for person, relationships etc
+
+    Uses entity type and natural key to create a stable and deterministic identifier
+    survives transformation 
+
+    Args -
+        entity_type(str): Type of entity, such as person or event.
+        natural_key(str): Stable value used to identify the entity e.g. WikiTreeID.
+    Returns:
+        UUID string.
+    """
     return str(uuid.uuid5(PROJECT_NAMESPACE, f"{entity_type}:{natural_key}"))
 
 
-def profile_url(wikitree_id):
+def profile_url(wikitree_id: str | None) -> str | None:
     if not wikitree_id:
         return None
     return f"{WIKITREE_PROFILE_BASE_URL}{wikitree_id}"
 
 
-def read_csv_required(path):
+def read_csv_required(path: Path) -> pd.DataFrame:
     if not path.exists():
         raise FileNotFoundError(f"Missing required input file: {path}")
 
     return pd.read_csv(path, dtype=str, keep_default_na=False)
 
 
-def add_missing_columns(df, columns):
+def add_missing_columns(
+    df: pd.DataFrame,
+    columns: list[str],
+) -> pd.DataFrame:    
+    """Ensure that all expected columns exist in DataFrame.
+        
+        Missing columns are added with None values
+    """
     for col in columns:
         if col not in df.columns:
             df[col] = None
     return df
 
 
-def prepare_people(raw_people: list[str]) -> pd:
-    """
-    Cleans columns related to people 
+def prepare_people(raw_people: pd.DataFrame) -> pd.DataFrame:
+    """Clean and prepare WikiTree people
+
+    Ensures expected columns exist, cleans ID, normalise gender, 
+    location, removes unusable records and duplicates and provides UUID 
     Args -  
         raw_people (list[str]): csv file containing data of people 
     Returns -
         pandas dataframe: dataframe of cleaned person 
     """
-    # Replacing missing columns with Nan  
+    # Ensuring expected columns exist and are fileld 
     df = raw_people.copy()
     df = add_missing_columns(df, PEOPLE_INPUT_COLUMNS)
 
@@ -245,30 +304,35 @@ def prepare_people(raw_people: list[str]) -> pd:
         "data_status",
     ]
 
-    # Cleaning columns
+    # Cleaning text
     for col in text_cols:
         df[col] = df[col].apply(clean_text)
 
-    # Cleaning, normgalizing and parsing relevant columns in dataframe
+    # Cleaning, normalizing and parsing gender, location and data status
     df["gender"] = df["gender"].apply(normalise_gender)
     df["birth_location"] = df["birth_location"].apply(clean_location)
     df["death_location"] = df["death_location"].apply(clean_location)
     df["_parsed_data_status"] = df["data_status"].apply(parse_data_status)
 
-    # Dropping duplicates for null valus in ID fields
+    # Only copying people wth both WikiTreeID and PersonID
     df = df[df["person_id"].notna() & df["wikitree_id"].notna()].copy()
+    # Dropping rows with duplicate WikiTreeID or PersonID
     df = df.drop_duplicates(subset=["person_id"], keep="first")
     df = df.drop_duplicates(subset=["wikitree_id"], keep="first")
-    
+
+    # Generates ID for name and person
     df["schema_person_id"] = df["wikitree_id"].apply(lambda value: stable_uuid("person", value))
     df["schema_name_id"] = df["wikitree_id"].apply(lambda value: stable_uuid("name", value))
 
     return df.reset_index(drop=True)
 
 
-def prepare_relationships(raw_relationships: list[str]) -> pd:
-    """
-    cleans columns related to relationships
+def prepare_relationships(
+    raw_relationships: pd.DataFrame,
+) -> pd.DataFrame:
+    """Clean and prepare parent-child relationship 
+    
+    cleans ParentIDs, ChildIDs, relationship types and removing duplicate or incomplete relationship rows
     Args -
         raw_relationships(list[str]): csv file listing relationships between people
     Return - 
@@ -284,16 +348,25 @@ def prepare_relationships(raw_relationships: list[str]) -> pd:
     df["child_wikitree_id"] = df["child_wikitree_id"].apply(clean_text)
     df["relationship_type"] = df["relationship_type"].apply(clean_text)
 
-    # Dropping duplicates
+    # Only copying if rows has valid ParentID and ChildID
     df = df[df["parent_id"].notna() & df["child_id"].notna()].copy()
+    # Dropping duplicates
     df = df.drop_duplicates(subset=["parent_id", "child_id", "relationship_type"], keep="first")
 
     return df.reset_index(drop=True)
 
 
-def build_person_table(people: pd, relationships: pd) -> pd:
-    """
-    Adds rows to person table
+def build_person_table(
+    people: pd.DataFrame,
+    relationships: pd.DataFrame,
+) -> pd.DataFrame:
+    """Builds relational people table
+    
+    Each  WikiTree profile turned into  Person row.
+    `Has_Children` comes from if profile is a
+    parent in the cleaned relationship data.
+
+
     Args -
         people (pandas dataframe): cleaned dataframe of people
         relationships (pandas dataframe): cleaned dataframe of relationships
@@ -320,9 +393,11 @@ def build_person_table(people: pd, relationships: pd) -> pd:
     return pd.DataFrame(rows, columns=PERSON_COLUMNS)
 
 
-def build_names_table(people: pd) -> pd:
+def build_names_table(
+    people: pd.DataFrame,
+) -> pd.DataFrame:
     """
-    Adds rows to name table
+    Adds rows to `name` table
     Args -
         people (pd): pandas dataframe of people
     Returns -
@@ -374,7 +449,7 @@ def make_event_row(event_key, person_id_1, person_id_2, event_type, raw_date=Non
     }
 
 
-def add_life_events(events: list[str], people: list[str]) -> None:
+def add_life_events(events: list[dict[str, Any]], people: pd.DataFrame) -> None:
     """
     Adding rows relating to life events of people
     Args - 
@@ -387,7 +462,7 @@ def add_life_events(events: list[str], people: list[str]) -> None:
         schema_person_id = row["schema_person_id"]
         wikitree_id = row["wikitree_id"]
 
-        # parsing days, month, year annd dates
+        # parsing and appending date of birth data
         birth_raw, birth_year, birth_month, birth_day = parse_date_parts(row.get("birth_date"))
         # Appending birth data
         if birth_raw or row.get("birth_location"):
@@ -420,17 +495,27 @@ def add_life_events(events: list[str], people: list[str]) -> None:
                 data_status=status_for_field(row, "DeathDate") or status_for_field(row, "DeathLocation"),
             ))
 
-def add_relationship_events(events: list, rejections:list, people:list[str], relationships:list[str]) -> None:
+def add_relationship_events(events: list, rejections:list, people:list[str],
+                             relationships:list[str]) -> None:
+    """Convert relationship into event records
+
+    WikiTree IDs  mapped to Person UUIDs. Relationship 
+    only converted into an event only when both the parent and child exist in the
+    transformed people dataset. Relationships with missing nodes are added
+    to the rejection log 
+
+    Args -
+        events(list): Event records.
+        rejections(list): Rejected relationship records.
+        people(list): Cleaned people records.
+        relationships(list): Cleaned parent-child relationships.
     """
-    Appending relationship related events 
-    """
-    
+
     id_to_schema_id = dict(zip(people["person_id"], people["schema_person_id"]))
     id_to_wikitree_id = dict(zip(people["person_id"], people["wikitree_id"]))
     
-    
+    # Building parent-child relationship 
     for _, rel in relationships.iterrows():
-        # Building parent-child relationship 
         parent_source_id = rel.get("parent_id")
         child_source_id = rel.get("child_id")
         relationship_type = clean_text(rel.get("relationship_type")) or "parent_of"
@@ -461,9 +546,15 @@ def add_relationship_events(events: list, rejections:list, people:list[str], rel
         ))
 
 
-def build_event_table(people: list[str], relationships: list[str]) ->  pd:
+def build_event_table(people: list[str], 
+                      relationships: list[str]) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
-    builds event table
+    Builds relationship and life event records for event table
+
+    Birth and death events generated from each person's available
+    data. Parent child relationships converted into events
+    if both exist in the transformed people dataset.
+
     Args - 
         people (list[str]): Data related to people
         relationships (list[str]): Data related to relationships
