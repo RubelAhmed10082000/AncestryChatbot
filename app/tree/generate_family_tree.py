@@ -1,7 +1,22 @@
+"""
+Generate ancestor trees from schema.
+
+loads Person, Name and Event tables, builds people
+index, extracts recorded parent-child relationships, and traverses
+relationships from root profile.
+
+traversal uses breadth-first search so generation depth can be
+limited. The resulting nodes and edges can be returned through the
+API or exported as CSV, JSON and a standalone HTML visualisation.
+
+It does not infer or create unsupported family relationships.
+"""
+
 import argparse
 import json
 from collections import defaultdict, deque
 from pathlib import Path
+from app.data_pipeline.transform import clean_text
 
 import pandas as pd
 
@@ -18,24 +33,6 @@ PARENT_EVENT_TYPES = {"father_of", "mother_of", "parent_of"}
 BAD_VALUES = {"", "nan", "NaN", "None", "none", "NULL", "null"}
 
 
-def clean_text(value: str) -> str:
-    """
-    Cleans text string
-    """
-    if value is None:
-        return None
-
-    if pd.isna(value):
-        return None
-
-
-    text = str(value).strip()
-    if text in BAD_VALUES:
-        return None
-
-    return text
-
-
 def read_required_csv(path):
     """
     Reads csv file path
@@ -46,7 +43,10 @@ def read_required_csv(path):
     return pd.read_csv(path, dtype=str, keep_default_na=False)
 
 
-def safe_int(value):
+def safe_int(value: any) -> float | None:
+    """
+    Converts numeric values to integer otherwise returns None
+    """
     text = clean_text(value)
     if text is None:
         return None
@@ -54,16 +54,23 @@ def safe_int(value):
    
 
 
-def build_full_name(row: pd) -> str:
+def build_full_name(row: pd.Series) -> str:
     """
-    cleans and joins name strings
+    Builds full name for display using full name, middle name and birth surname
+
+    Prefers birth surname over current surname
+
+    If names unavalable then fallback on WikiTreeID, PersonID then generic label
     """
     parts = []
 
+    # Extracting  first_name and middle_name
     first_name = clean_text(row.get("First_Name"))
     middle_name = clean_text(row.get("Middle_Name"))
+    # Extracting last name at birth if available or current last name if not
     last_name = clean_text(row.get("Last_Name_At_Birth")) or clean_text(row.get("Last_Name_Current"))
 
+    # combining names together to get full name
     for part in [first_name, middle_name, last_name]:
         if part:
             parts.append(part)
@@ -71,16 +78,31 @@ def build_full_name(row: pd) -> str:
     if parts:
         return " ".join(parts)
 
+    # If names not avaiable then falling back on WikiTreeID then PersonID then label
     return clean_text(row.get("Wikitree_ID")) or clean_text(row.get("Person_ID")) or "Unknown person"
 
 
-def load_schema(schema_dir: str):
+def load_schema(schema_dir: str) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Load Person, Name and Event tables.
+
+    Optional columns are added with missing values when absent so 
+    tree generation logic can operate against a consistent schema.
+
+    Args -
+        schema_dir(str): Directory containing the transformed schema CSV files
+
+    Returns -
+        tuple containing the Person, Name and Event DataFrames.
+    """
+
     schema_dir = Path(schema_dir)
 
+    # Extracting  tables from csv files
     person = read_required_csv(schema_dir / PERSON_FILE)
     names = read_required_csv(schema_dir / NAMES_FILE)
     event = read_required_csv(schema_dir / EVENT_FILE)
 
+    # Extracting relevant columns from person, name and event tables
     person_cols = ["Person_ID", "Wikitree_ID", "Gender", "Profile_URL", "Has_Children"]
     name_cols = [
         "Person_ID",
@@ -101,6 +123,7 @@ def load_schema(schema_dir: str):
         "Data Status",
     ]
 
+    # Filling in any optional columns with None values
     for col in person_cols:
         if col not in person.columns:
             person[col] = None
@@ -116,7 +139,12 @@ def load_schema(schema_dir: str):
     return person, names, event
 
 
-def build_people_index(person: pd, names:pd, event:pd) -> pd:
+def build_people_index(
+    person: pd.DataFrame,
+    names: pd.DataFrame,
+    event: pd.DataFrame,
+) -> pd.DataFrame:
+    
     """
     Builds row, one row per person, with person, name and event attributes
     
@@ -127,8 +155,10 @@ def build_people_index(person: pd, names:pd, event:pd) -> pd:
     Return - 
         pd: dataframe with names, events and persons merged
     """
+    # Merging name and person table
     people = person.merge(names, on="Person_ID", how="left", suffixes=("", "_name"))
 
+    # Extracting, deduplicating and renaming birth event table
     birth = event[event["Event_Type"] == "birth"].copy()
     birth = birth.drop_duplicates(subset=["Person_ID_1"], keep="first")
     birth = birth.rename(
@@ -141,6 +171,7 @@ def build_people_index(person: pd, names:pd, event:pd) -> pd:
         }
     )
 
+    # Extracting, deduplicating and renaming death event table
     death = event[event["Event_Type"] == "death"].copy()
     death = death.drop_duplicates(subset=["Person_ID_1"], keep="first")
     death = death.rename(
@@ -153,9 +184,11 @@ def build_people_index(person: pd, names:pd, event:pd) -> pd:
         }
     )
 
+
     birth_cols = ["Person_ID", "Birth_Date", "Birth_Year", "Birth_Location", "Birth_Data_Status"]
     death_cols = ["Person_ID", "Death_Date", "Death_Year", "Death_Location", "Death_Data_Status"]
 
+    # Merging people table with  death and birth event table
     people = people.merge(birth[birth_cols], on="Person_ID", how="left")
     people = people.merge(death[death_cols], on="Person_ID", how="left")
     people["Full_Name"] = people.apply(build_full_name, axis=1)
@@ -167,18 +200,26 @@ def resolve_root_person_id(person: pd, person_id: str | None,
                            wikitree_id: str | None) -> str:
     """
     resolves entity match using either wikitree_id or person_id
+
+    PersonID takes priority, otherwise WikiTreeID is used as a fallback
+
     Args -
         person(pd): pandas dataframe containing person attribute
         person_id(str | None): synthetic ID identifying person within person dataframe 
         wikitree_id(str | None): ID given by wikitree
+
     Returns - 
         str: ID of person entity
     """
+
+    # Matching on person_id
     if person_id:
         match = person[person["Person_ID"] == person_id]
         if not match.empty:
             return str(match.iloc[0]["Person_ID"])
         raise ValueError(f"No person found with Person_ID={person_id}")
+    
+    # Matching on wikitree_id if no person_id match found
     if wikitree_id:
         match = person[person["Wikitree_ID"] == wikitree_id]
         if not match.empty:
@@ -188,17 +229,17 @@ def resolve_root_person_id(person: pd, person_id: str | None,
     raise ValueError("Provide either --person-id or --wikitree-id.")
 
 
-def build_parent_edges(event: pd) -> pd:
-    """
-    Creates new dataframe that will contain edges(relations) between person entities
+def build_parent_edges(event: pd.DataFrame) -> pd.DataFrame:
+    """Extract parent child edges from the relationship event table
+
+    Only father_of, mother_of, child_of relationship retained
     Args - 
-        event(pd): pandas dataframe containing event data involving one or more person entity
+        event(pd.DataFrame): pandas dataframe containing event data involving one or more person entity
     Returns -   
-        pd: dataframe that will contain edges(relations) between person entites
+       dataframe that will contain edges(relations) between person entites
     """
-    # edges dataframe will filter based on parent events (such as parent of, mother_of, father_of)
-    # This is the primary way we establish this relation
-    # Justification for this decision will be discussed further in Chapter 3: Methodology
+
+    # retaining only event types elating to parent child relationships and renaming them 
     edges = event[event["Event_Type"].isin(PARENT_EVENT_TYPES)].copy()
     edges = edges.rename(
         columns={
@@ -228,24 +269,33 @@ def build_parent_edges(event: pd) -> pd:
     return edges
 
 
-def collect_ancestor_subgraph(root_person_id: str, person: pd, parent_edges:pd, 
+def collect_ancestor_subgraph(root_person_id: str, people: pd.DataFrame, parent_edges:pd.DataFrame, 
                               max_generations: int, 
                               include_missing_stubs: bool) -> tuple[pd.DataFrame,pd.DataFrame]:
     """
-    Traverses ancestor graph - starts from initial (root) person and collects ancestors up to max depth
+    "Collect the ancestors for a root person.
+
+    Breadth first search from child to parent. Rroot is
+    generation 0, its parents are generation 1, and traversal continues until
+    `max_generations` is reached.
+
+    A visited map prevents repeated visits while still.
+    Missing linked profiles can optionally be represented as stub nodes.
+
     Args - 
         root_person_id(str): ID of person that traversal will start from
-        person(pd): dataframe containing attribute of people, will be used in traversal
-        parent_edges(pd): dataframe recording relations between child and aprent 
+        person(pd.DataFrame): dataframe containing attribute of people, will be used in traversal
+        parent_edges(pd.DataFrame): dataframe recording relations between child and parent 
         max_generations(int): maximum depth of traversal
+
     Returns - 
         tuple[df, df]: a tuple that contains both nodes and edges between nodes
     """
     # Setting person_id
-    people_ids = set(person["Person_ID"].astype(str))
+    people_ids = set(people["Person_ID"].astype(str))
     parent_lookup = defaultdict(list)
 
-    # collecting child of every parent 
+    # collecting child of every person
     for _, edge in parent_edges.iterrows():
         child_id = str(edge["child_person_id"])
         parent_lookup[child_id].append(edge.to_dict())
@@ -255,17 +305,19 @@ def collect_ancestor_subgraph(root_person_id: str, person: pd, parent_edges:pd,
     found_edges = []
     queue = deque([(root_person_id, 0)])
 
+    # Using queue so we respect maximum depth
     while queue:
         current_id, generation = queue.popleft()
 
         if generation >= max_generations:
             continue
-        
+
+        # Collecting id of both parent and child
         for edge in parent_lookup.get(current_id, []):
             parent_id = str(edge["parent_person_id"])
             child_id = str(edge["child_person_id"])
 
-            # parent and child need to exist first before being added as an  edge
+            # parent and child need to exist first before being added as an edge
             parent_exists = parent_id in people_ids
             child_exists = child_id in people_ids
 
@@ -273,7 +325,7 @@ def collect_ancestor_subgraph(root_person_id: str, person: pd, parent_edges:pd,
                 continue
             
 
-            # Creting new edge if edge not already recorded
+            # Creating new edge if edge not already recorded
             new_edge = dict(edge)
             # Adding parent and child to edges
             new_edge["parent_exists_in_people"] = parent_exists
@@ -282,6 +334,7 @@ def collect_ancestor_subgraph(root_person_id: str, person: pd, parent_edges:pd,
             new_edge["child_generation"] = generation
             found_edges.append(new_edge)
 
+            # Adding parent_id to visited then traversing one generation lower
             if parent_id not in visited or visited[parent_id] > generation + 1:
                 visited[parent_id] = generation + 1
                 if parent_exists:
@@ -289,7 +342,7 @@ def collect_ancestor_subgraph(root_person_id: str, person: pd, parent_edges:pd,
 
     
     people_by_id = {}
-    for _, row in person.iterrows():
+    for _, row in people.iterrows():
         people_by_id[str(row["Person_ID"])] = row
 
     # Organising people by generations
@@ -353,9 +406,17 @@ def collect_ancestor_subgraph(root_person_id: str, person: pd, parent_edges:pd,
     return nodes.reset_index(drop=True), edges.reset_index(drop=True)
 
 
-def summarise_tree(nodes: pd, edges: pd) -> pd:
-    """
-    Summarises data collected from tree traversal
+def summarise_tree(nodes: pd.DataFrame, edges: pd.DataFrame) -> pd:
+    """Summarises data collected from tree traversal
+
+    Includes node and edge count, maximum generation, stub count and relationship type counts
+
+    Args - 
+        nodes(pd.DataFrame): Generated tree nodes
+        edges(pd.DataFrame): Generated tree edges
+    
+    Returns - 
+        Dataframe describing the tree
     """
     rows = [
         {"metric": "node_count", "value": len(nodes)},
@@ -374,13 +435,19 @@ def summarise_tree(nodes: pd, edges: pd) -> pd:
     return pd.DataFrame(rows)
 
 
-def tree_to_json(nodes, edges):
+def tree_to_json(
+    nodes: pd.DataFrame,
+    edges: pd.DataFrame,
+) -> dict[str, list[dict]]:    
+    """Convert tree node and edge into a JSON dictionary."""
+
     return {
         "nodes": nodes.to_dict(orient="records"),
         "edges": edges.to_dict(orient="records"),
     }
 
 def build_output_dir(base_output_dir, root_wikitree_id, root_person_id):
+    """Build directory for a generated tree."""
     folder_name = root_wikitree_id or root_person_id
     safe_name = "".join(ch if ch.isalnum() or ch in {"-", "_"} else "_" for ch in folder_name)
     return Path(base_output_dir) / safe_name
