@@ -177,7 +177,7 @@ def test_collect_ancestor_subgraph_one_generation(mini_family_data):
 
     nodes, edges = generate_family_tree.collect_ancestor_subgraph(
         root_person_id="person-jane",
-        person=people_index,
+        people=people_index,
         parent_edges=parent_edges,
         max_generations=1,
         include_missing_stubs=False,
@@ -204,7 +204,7 @@ def test_collect_ancestor_subgraph_two_generations(mini_family_data):
 
     nodes, edges = generate_family_tree.collect_ancestor_subgraph(
         root_person_id="person-jane",
-        person=people_index,
+        people=people_index,
         parent_edges=parent_edges,
         max_generations=2,
         include_missing_stubs=False,
@@ -247,7 +247,7 @@ def test_collect_ancestor_subgraph_excludes_missing_stubs_when_disabled(mini_fam
 
     nodes, edges = generate_family_tree.collect_ancestor_subgraph(
         root_person_id="person-jane",
-        person=people_index,
+        people=people_index,
         parent_edges=parent_edges,
         max_generations=1,
         include_missing_stubs=False,
@@ -281,7 +281,7 @@ def test_collect_ancestor_subgraph_includes_missing_stubs_when_enabled(mini_fami
 
     nodes, edges = generate_family_tree.collect_ancestor_subgraph(
         root_person_id="person-jane",
-        person=people_index,
+        people=people_index,
         parent_edges=parent_edges,
         max_generations=1,
         include_missing_stubs=True,
@@ -308,7 +308,7 @@ def test_collect_ancestor_subgraph_deduplicates_edges(mini_family_data):
 
     nodes, edges = generate_family_tree.collect_ancestor_subgraph(
         root_person_id="person-jane",
-        person=people_index,
+        people=people_index,
         parent_edges=parent_edges,
         max_generations=1,
         include_missing_stubs=False,

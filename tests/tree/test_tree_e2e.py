@@ -20,7 +20,7 @@ def test_generate_family_tree_real_schema_jane_austen():
 
     nodes, edges = generate_family_tree.collect_ancestor_subgraph(
         root_person_id=root_person_id,
-        person=people_index,
+        people=people_index,
         parent_edges=parent_edges,
         max_generations=2,
         include_missing_stubs=False,
@@ -56,7 +56,7 @@ def test_generate_family_tree_real_schema_writes_json_and_html(tmp_path):
 
     nodes, edges = generate_family_tree.collect_ancestor_subgraph(
         root_person_id=root_person_id,
-        person=people_index,
+        people=people_index,
         parent_edges=parent_edges,
         max_generations=2,
         include_missing_stubs=False,
