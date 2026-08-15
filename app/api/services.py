@@ -89,7 +89,7 @@ def tree(
 
     nodes, edges = collect_ancestor_subgraph(
         root_person_id=root_person_id,
-        person = people,
+        people=people,
         parent_edges=parent_edges,
         max_generations=generations,
         include_missing_stubs=include_missing_stubs
