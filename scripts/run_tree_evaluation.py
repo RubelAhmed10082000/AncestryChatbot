@@ -1,3 +1,13 @@
+"""
+Evaluate ancestor trees against WikiTree source.
+
+Expected and actual trees are compared using node and edge precision, recall and
+F1, generation accuracy, direct-parent recall and structural integrity checks.
+
+It does not verify if the WikiTree relationships are historically correct.
+"""
+
+
 from collections import defaultdict, deque
 from pathlib import Path
 
@@ -5,6 +15,7 @@ import pandas as pd
 
 from app.api.services import tree
 
+from app.data_pipeline.transform import clean_text, read_csv_required
 
 RAW_DIR = Path("data/wikitree_test")
 OUTPUT_DIR = Path("data/evaluation/final")
@@ -20,36 +31,17 @@ DISCREPANCIES_FILE = OUTPUT_DIR / "tree_discrepancies.csv"
 GENERATIONS = 3
 
 
-def clean_text(value) -> str | None:
-    if value is None:
-        return None
-
-    try:
-        if pd.isna(value):
-            return None
-    except TypeError:
-        pass
-
-    text = str(value).strip()
-
-    if text in {
-        "",
-        "nan",
-        "NaN",
-        "None",
-        "none",
-        "NULL",
-        "null",
-    }:
-        return None
-
-    return text
-
-
 def safe_divide(
     numerator: float,
     denominator: float,
 ) -> float:
+    """Divides two values while handling empty values.
+
+    When both numerator and denominator are zero, the comparison is treated as
+    perfect agreement and returns 1.0. A above zero numerator with a zero
+    denominator returns 0.0.
+    """
+    
     if denominator == 0:
         return 1.0 if numerator == 0 else 0.0
 
@@ -60,6 +52,8 @@ def harmonic_mean(
     precision: float,
     recall: float,
 ) -> float:
+    """Return the harmonic mean of precision and recall"""
+    
     if precision + recall == 0:
         return 0.0
 
@@ -71,25 +65,20 @@ def harmonic_mean(
     )
 
 
-def read_required_csv(path: Path) -> pd.DataFrame:
-    if not path.exists():
-        raise FileNotFoundError(
-            f"Missing required file: {path}"
-        )
-
-    return pd.read_csv(
-        path,
-        dtype=str,
-        keep_default_na=False,
-    )
-
-
 def load_source_data():
-    people = read_required_csv(PEOPLE_FILE)
-    relationships = read_required_csv(
+    """Load and validate inputs used for tree evaluation
+
+    The evaluation requires extracted people, parent-child relationships and
+    seed profiles
+
+    Returns -
+        A tuple containing people, relationships and seed-profile DataFrames.
+    """
+    people = read_csv_required(PEOPLE_FILE)
+    relationships = read_csv_required(
         RELATIONSHIPS_FILE
     )
-    seeds = read_required_csv(SEEDS_FILE)
+    seeds = read_csv_required(SEEDS_FILE)
 
     required_people = {
         "person_id",
@@ -135,12 +124,22 @@ def build_expected_tree(
     max_generations: int,
 ) -> tuple[dict[str, int], set[tuple[str, str, str]]]:
     """
-    Construct expected nodes and edges directly from the raw
-    extraction files.
+    Construct expected nodes and edges directly from raw
+    files.
 
-    This evaluates whether transformation and traversal preserve
-    the source relationships. It does not independently verify
-    whether WikiTree's genealogy is historically correct.
+    Evaluates if transformation and traversal preserve
+    the source relationships. Does not verify
+    if WikiTree is historically correct.
+
+    Args - 
+        root_person_id(str): WikiTree ID of profile
+        people(pd.DataFrame): people record
+        relationships(pd.DataFrame): parent-child relationshipa
+        max_generations(pd.DataFrame): Maximum ancestor generation to include
+
+    Returns - 
+        Mapping of WikiTree ID to expected generation and set of expected
+        parent child relationship edges.
     """
     source_to_wikitree = {
         str(row["person_id"]): clean_text(
@@ -258,6 +257,7 @@ def parse_actual_tree(
     dict[str, int],
     set[tuple[str, str, str]],
 ]:
+     
     nodes = pd.DataFrame(
         payload.get("nodes", [])
     )
@@ -352,6 +352,18 @@ def count_structural_errors(
     nodes: pd.DataFrame,
     edges: pd.DataFrame,
 ) -> dict:
+    """Counting integrity problems in a generated tree.
+
+    Include duplicate nodes and edges, missing edge endpoints,
+    loopss, incorrect generation differences etc.
+
+    Args -
+        nodes(pd.DataFrame): Generated tree nodes
+        edges(pd.DataFrame): Generated tree edges
+
+    Returns - 
+        Counts for each structural integrity check
+    """
     if nodes.empty:
         return {
             "duplicate_node_count": 0,
@@ -485,7 +497,21 @@ def add_set_discrepancies(
     actual_generations: dict[str, int],
     expected_edges: set[tuple[str, str, str]],
     actual_edges: set[tuple[str, str, str]],
-):
+) -> None:
+    """Record differences between expected and generated tree sets.
+
+    Discrepancies recorded for missing or unexpected nodes, generation
+    mismatches and missing or unexpected relationship edges
+
+    Args:
+        rows(list): Mutable list receiving discrepancy records.
+        seed_label(str): Human-readable evaluation seed label.
+        wikitree_id(str): WikiTree ID of the evaluated root.
+        expected_generations(dict): Expected generation for each source profile.
+        actual_generations(dict): Generated generation for each source profile.
+        expected_edges(set): Expected parent-child relationship set.
+        actual_edges(set): Generated parent-child relationship set.
+    """
     expected_nodes = set(expected_generations)
     actual_nodes = set(actual_generations)
 
@@ -577,6 +603,20 @@ def evaluate_tree(
     relationships: pd.DataFrame,
     discrepancy_rows: list[dict],
 ) -> dict:
+    """Evaluate ancestor tree against expectations.
+
+        Node sets, edge sets, generation assignments and structural
+        properties are compared.
+
+        Args  -
+            seed(pd.Series): Evaluation root containing its label and source identifiers.
+            people(pd.DataFrame): Frozen raw people records.
+            relationships(pd.DataFrame): Frozen raw relationship records.
+            discrepancy_rows(list): Shared collection for detailed evaluation failures.
+
+        Returns - 
+            Per-tree evaluation metrics and structural diagnostic counts.
+    """
     seed_label = clean_text(
         seed["seed_label"]
     )
@@ -904,6 +944,17 @@ def evaluate_tree(
 def build_summary(
     results: pd.DataFrame,
 ) -> pd.DataFrame:
+    """Aggregate tree results into overall evaluation metrics.
+
+    Node and edge precision, recall and F1 are calculated using counts
+    across all evaluated trees. 
+
+    Args -
+        results (pd.DataFrame): Per-tree evaluation results.
+
+    Returns -
+        Metric/value DataFrame for the final tree-evaluation summary.
+    """
     trees_attempted = len(results)
 
     trees_generated = int(
