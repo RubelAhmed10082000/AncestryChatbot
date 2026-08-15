@@ -1,3 +1,16 @@
+"""
+Retrieve and rank candidates 
+
+Builds a searchable candidate index from the Person, Name and Event
+tables. Fields compared with each candidate
+using similarity functions.
+
+Weighting added and  and then adjusted
+using fixed ranking rules. Missing query fields excluded 
+
+Candidates returned ranked with field scores.
+"""
+
 import argparse
 import math
 import re
@@ -38,12 +51,17 @@ DISPLAY_COLUMNS = [
 
 
 class CandidateRetriever:
-    """
-    Class used to retrieve candidates from database based on matched paramters
+    """Load records and return ranked candidate matches.
+
+    Builds search index from the Person, Name and
+    Event tables. Fields compared final ranking score.
     """
     DEFAULT_WEIGHTS = DEFAULT_WEIGHTS
 
     def __init__(self, schema_dir=DEFAULT_SCHEMA_DIR, weights=None):
+        """Loads Name, Person, Event tables. 
+        Selects weights and produces search index
+        """
         self.schema_dir = Path(schema_dir)
         self.weights = weights or self.DEFAULT_WEIGHTS
 
@@ -52,7 +70,9 @@ class CandidateRetriever:
         self.event_df = self._read_required_csv(EVENT_FILE)
         self.index_df = self._build_search_index()
 
-    def _read_required_csv(self, filename):
+    def _read_required_csv(self, filename: str) -> pd.DataFrame:
+        """Loads .csv schema file as Pandas DataFrame
+        """
         path = self.schema_dir / filename
 
         if not path.exists():
@@ -62,15 +82,21 @@ class CandidateRetriever:
 
     def _build_search_index(self):
         """
-        Creates pandas dataframe with people, name and event data
+        Creates searchable index for each candidate profile
+
+        Person and Name records merged with birth and death event.
+
+        Dataframe contains both identity and event fields 
         Return - 
             pandas dataframe: merged dataframe with people, name and events
         """
+
+        # Starting with People, Name and Events table
         people = self.person_df.copy()
         names = self.names_df.copy()
         events = self.event_df.copy()
         
-
+        # Making sure these columns exists
         for col in ["Person_ID", "Wikitree_ID", "Gender", "Profile_URL", "Has_Children"]:
             if col not in people.columns:
                 people[col] = None
@@ -98,7 +124,7 @@ class CandidateRetriever:
             if col not in events.columns:
                 events[col] = None
 
-        # Merging people and names dataframe
+        # Merging people and names dataframe - giving each person their nme
         people = people.merge(names, on="Person_ID", how="left", suffixes=("", "_name"))
 
         # Cleaning birth events
@@ -144,16 +170,18 @@ class CandidateRetriever:
             "Death_Data_Status",
         ]
 
-        # Merging people dataframe with death and birth
+        # Merging people dataframe with death and birth - giving each person a birth and death event
         people = people.merge(birth_events[birth_cols], on="Person_ID", how="left")
         people = people.merge(death_events[death_cols], on="Person_ID", how="left")
         people["Full_Name"] = people.apply(self._build_full_name, axis=1)
 
         return people
 
-    def _build_full_name(self, row: list) -> list | None:
+    def _build_full_name(self, row: list) -> str:
         """
-        Combines first, middle and last names
+        Combines first, middle and last names to build full name
+
+        Birth surname priortised over other surnames
         Args -
             row (list): list of names
         Returns -
@@ -163,6 +191,7 @@ class CandidateRetriever:
         parts = [
             clean_text(row.get("First_Name")),
             clean_text(row.get("Middle_Name")),
+            # preffering last name at brirht over any current last name
             clean_text(row.get("Last_Name_At_Birth")) or clean_text(row.get("Last_Name_Current")),
         ]
 
@@ -176,24 +205,44 @@ class CandidateRetriever:
 
     def find_candidates(
         self,
-        first_name=None,
-        last_name=None,
-        birth_year=None,
-        birth_location=None,
-        gender=None,
-        top_k=5,
-        min_score=0.0,
+        first_name: str | None = None,
+        last_name: str | None = None,
+        birth_year: int | None = None,
+        birth_location: str | None = None,
+        gender: str | None = None,
+        top_k: int = 5,
+        min_score: float=0.0,
     ):
-        """
-        Matches candidates based on attribute similarity
+        """Rank candidate profiles against evidence.
 
+            Each query field is compared with field. 
+            Field similarities combined using the weights and ranks are adjusted
+
+            Missing query fields does not affected to weighting. Candidate
+            records are sorted by adjusted rank score with field-level scores used as
+            deterministic secondary ordering criteria.
+
+            Args -
+                first_name(str): Query first name.
+                last_name(str): Query surname.
+                birth_year(int): Query birth year.
+                birth_location(str): Query birth location.
+                gender(str): Query gender.
+                top_k(int): Maximum number of candidates to return.
+                min_score(float): Minimum rank score for inclusion.
+
+            Returns -
+                A DataFrame containing the highest-ranked candidate profiles.
         """
         rows = []
 
-        # matching candidates based on similarity of attributes
+        # matching candidates by ranking similarity of attribute values provided
         for _, candidate in self.index_df.iterrows():
+            # raw attributes values used for ranking
             scores = {
+                # Matching string similiarty of first name between candidate and evidence
                 "first_name_score": best_string_similarity(first_name, [candidate.get("First_Name")]),
+                # current surname contributes half as much to birth surname if birth surname not available 
                 "last_name_score": max(
                     best_string_similarity(last_name, [candidate.get("Last_Name_At_Birth")]),
                     0.5 * best_string_similarity(last_name, [candidate.get("Last_Name_Current")]),
@@ -242,6 +291,7 @@ class CandidateRetriever:
         if results.empty:
             return results
 
+        # candidate primarily ranked on rank_score
         sort_cols = [
             "rank_score",
             "last_name_score",
@@ -257,13 +307,12 @@ class CandidateRetriever:
         return results.head(top_k)
 
 
-def clean_text(value: str) -> str:
+def clean_text(value: str) -> str | None:
     """
-    Cleans text
+    Cleans text and turns unrecognised values to None
     """
     if value is None:
         return None
-
 
     if pd.isna(value):
          return None
@@ -279,7 +328,9 @@ def clean_text(value: str) -> str:
 
 def normalise_for_matching(value: str) -> str:
     """
-    standardizes text for matching
+    Standardizes text for matching
+
+    Text is turned to lowercase and punctuation and whitespaces stripped
     """
     text = clean_text(value)
 
@@ -293,7 +344,7 @@ def normalise_for_matching(value: str) -> str:
     return text
 
 
-def token_set(value: str) -> set:
+def token_set(value: Any) -> set[str]:
     """
     Splits text into tokens
     """
@@ -305,14 +356,16 @@ def token_set(value: str) -> set:
     return set(text.split())
 
 
-def sequence_similarity(left: str, right: str) -> SequenceMatcher:
+def sequence_similarity(left: str, right: str) -> float:
     """
-    Compares string similarity of two pieces of text and returns similarity ratio
+    Compares string similarity of string and returns similarity ratio
+
+    A score of 1.0 represents complete string match and 0.0 reperesents complete unmatched strings
     Args - 
         left (str): left string - compared to right 
         right (str): right string - compared to left
     Returns - 
-        SequencetMatcher: ratio of similarity between left and right
+        ratio of similarity between left and right
     """
     left = normalise_for_matching(left)
     right = normalise_for_matching(right)
@@ -324,29 +377,40 @@ def sequence_similarity(left: str, right: str) -> SequenceMatcher:
 
 
 def token_overlap_similarity(left: str, right: str) -> float:
+    """Return token similarity using intersection of union.
+
+    Ignores token order and supports partial matches
+    between locations containing different levels of geographic detail.
+    """
+
     left_tokens = token_set(left)
     right_tokens = token_set(right)
 
     if not left_tokens or not right_tokens:
         return 0.0
 
+    # Dividing number of shared unique tokens (intesection) 
+    # by total number of unique tokens (union)
     return len(left_tokens & right_tokens) / len(left_tokens | right_tokens)
 
 
-def best_string_similarity(query_value: str, candidate_values: dict) -> int:
+def best_string_similarity(query_value: Any, candidate_values: list[str]) -> int:
     """
     Returns the highest similarity score between two strings
+
+    Missing field returns NaN. 
+    If no candidate value available then score defaults to 0.0
     Args - 
-        query value (str): canonical string
-        candidate_value (dict): string that will be comapred to query value for similarity 
+        query value(str): canonical string
+        candidate_value(dict): string that will be comapred to query value for similarity 
     Returns -
-        int: Maximum score 
+       Maximum score 
     """
 
     if clean_text(query_value) is None:
         return math.nan
 
-    # Appending scores returned by sequence_similiarty() to scores
+    # Appending scores returned by `sequence_similiarty()` to scores
     scores = []
     for value in candidate_values:
         if clean_text(value):
@@ -358,15 +422,20 @@ def best_string_similarity(query_value: str, candidate_values: dict) -> int:
     return max(scores)
 
 
-def best_location_similarity(query_location: str, candidate_location: str) -> float:
+def best_location_similarity(query_location: Any, candidate_location: str) -> float:
     """
     Compares string similiarity of locations between query and candidate
+
+    Missing query value results in NaN value
+
+    Missing candidate value defaults score to 0.0
     Args -
         query_location(str): location used in query 
-            query originates from user but is converted by LLM layer 
+        query originates from user but is converted by LLM layer 
+
         candidate_location(str): location(s) retrieved by LLM and compared to query 
     Returns -
-        Int: similarity score between candidate and query locations strings
+        similarity score between candidate and query locations strings
     """
     if clean_text(query_location) is None:
         return math.nan
@@ -382,20 +451,29 @@ def best_location_similarity(query_location: str, candidate_location: str) -> fl
     return max(char_score, token_score)
 
 
-def year_similarity(query_year: int, candidate_year: int, max_difference: int=20) -> float:
+def year_similarity(query_year: Any, candidate_year: 
+                    Any, max_difference: int=20) -> float:
     """
-    Compares similarity in year between candidate and query year 
+    Compares similarity between candidate birth year and query birth year
+
+    Exact match is scored as 1.0 with 0.0 for complete unmatch
+
+    Score degrades the greater the year gap
+
+    Missing query returns NaN
     Args - 
-        query_year (int): year used in retrieval 
-        candidate_year (int): year(s) of event that is compared to the query year 
-        max_difference (int): buffer, in years, where match can still be valid
+        query_year(int): year used in retrieval 
+        candidate_year(int): year(s) of event that is compared to the query year 
+        max_difference(int): buffer, in years, where match can still be valid
     Returns -
-        float: difference between candidate and query years
+        Difference between candidate and query years
     """
+    # Return None if query year is None
     if query_year is None:
         return math.nan
 
     try:
+        # If candidate year is none then socre is 0.0
         if pd.isna(candidate_year):
             return 0.0
     except TypeError:
@@ -406,18 +484,21 @@ def year_similarity(query_year: int, candidate_year: int, max_difference: int=20
         query_year = int(float(query_year))
     except (TypeError, ValueError):
         return 0.0
-
+    
     diff = abs(query_year - candidate_year)
 
     if diff >= max_difference:
         return 0.0
 
+    # Adjusting score by absolute difference in years between candidate and query
     return 1.0 - (diff / max_difference)
 
 
 def gender_similarity(query_gender: str, candidate_gender: str) -> float:
     """
     Determines if gender of query is the same as candidate
+
+    Matching values score 1.0 while contradicting scores 0.0
     Args -
         query_gender(str): gender used in retrieval
         candidate_gender(str): gender of candidate profile
@@ -433,27 +514,25 @@ def gender_similarity(query_gender: str, candidate_gender: str) -> float:
 
     if candidate is None:
         return 0.0
-
-    # All the retrieval module needs to ascertain is if the genders are the same or not
-    # If not the system will look elsewhere - a candidate with a different gender from the query
-    # Becomes excluded. This will be talked about more in Chapter 3: Methodology
+    
+    # Mismatch scores zero but does not remove the candidate from ranking process.
     return 1.0 if query.lower()[0] == candidate.lower()[0] else 0.0
 
 
-def weighted_score(scores: dict, weights: dict) -> float:
+def weighted_score(scores: dict[str], weights: dict[str]) -> float:
     """
-    Calculates weighed score for a particular candidate profile field
+    Uses all field scores for profile to produce a weighted for each field
     Args -
         scores(dict): Similairty scores for each candidate profile attributes
-        weights(dict): weigth value given to each profile attribute
+        weights(dict): weight value given to each profile attribute
     Returns
-        float: weighted score of candidate profile attribute
+        weighted score of candidate profile attribute
     """
+
     numerator = 0.0
     denominator = 0.0
 
-    # Calculating and returning weights for each column attribute for a candidate profile
-    # Testing and validating different weight metrics will be discussed further in Chapter 3: Methodology
+
     for col, weight in weights.items():
         score = scores.get(col, math.nan)
 
@@ -465,7 +544,8 @@ def weighted_score(scores: dict, weights: dict) -> float:
                 continue
         except TypeError:
             continue
-        
+
+        # Adding numerator to score and multiplying by weight
         numerator += score * weight
         denominator += weight
 
@@ -475,10 +555,14 @@ def weighted_score(scores: dict, weights: dict) -> float:
     return round((numerator / denominator) * 100, 2)
 
 
-def adjust_score(score: float, scores: dict, query_birth_year: Any, candidate_birth_year: Any):
+def adjust_score(score: float, scores: dict[str, float], 
+                 query_birth_year: Any, candidate_birth_year: Any) -> float:
 
     """
     Adjusts scoring for candidate profile based on similarity scores of particular attributes
+
+    Exact agreement on first name, last name birth year increases score while weaker similarity reduce score.
+
     Args -
         score(float): total score of candidate profile
         scores(dict): scores for every attribute of candidate profile
@@ -487,14 +571,13 @@ def adjust_score(score: float, scores: dict, query_birth_year: Any, candidate_bi
     Returns - 
         float: adjusted score
     """
+    # Getting all values
     first = scores.get("first_name_score", math.nan)
     last = scores.get("last_name_score", math.nan)
     year = scores.get("birth_year_score", math.nan)
     location = scores.get("birth_location_score", math.nan)
 
-    # First and last name pefect similiarity increase the score
-    # For the purposes of the demo we will leave it at 1.0
-    # TODO: adjust code so that score increments based on a range of name similarity values
+    # First and last name pefect similiarity increase the score by 15
     if first == 1.0 and last == 1.0 and year == 1.0:
         score += 15
 
@@ -518,8 +601,6 @@ def adjust_score(score: float, scores: dict, query_birth_year: Any, candidate_bi
 
     
     # If first name or location is less than 0.6 we reduce the score
-    # We will explain this more in Chapter 3: Methodology
-
     if not is_missing_number(first) and first < 0.6:
         score -= 20
 
@@ -548,8 +629,12 @@ def is_missing_number(value):
 
 
 def explain_matches(scores: dict) -> str:
-    """
-    Provides placeholder explanation for ranks
+    """Summarises strength of match of candidate field with query.
+
+    Similarities 0.8 or higher are as strong matches
+    positive lower similarities are described as partial matches. Missing
+    query fields omitted from explanation.
+    
     Args - 
         scores(dict): scores for record matching
     Returns - 
