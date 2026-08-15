@@ -1,12 +1,20 @@
+"""
+Calculate confidence scores for ranked candidates.
+
+Confidence is the amount of supplied evidence,
+the strength of agreement across that evidence, direct contradictions, and
+ambiguity caused by other ranked candidates.
+
+Confidence score are evidence indicators not calibrated probabilities of identity. 
+"""
+
 import argparse
-import importlib.util
-import sys
 from pathlib import Path
 import pandas as pd
 from typing import Any
+from app.retrieval.candidate_retrieval import CandidateRetriever
 
 DEFAULT_SCHEMA_DIR = Path("data/wikitree_schema")
-DEFAULT_CANDIDATE_MODULE_PATH = Path("app/retrieval/candidate_retrieval.py")
 
 
 SCORE_COLUMNS = [
@@ -36,7 +44,13 @@ FRONT_COLUMNS = [
 ]
 
 
-def safe_float(value):
+def safe_float(value: Any) -> float | None:
+    """
+    Converts values into float
+
+    Returns None if value missing or invalid
+    """
+
     if value is None:
         return None
 
@@ -54,7 +68,7 @@ def safe_float(value):
 
 def evidence_coverage(row: pd) -> float:
     """
-    Calcuates how many rows in dataframe can be used to calculate confidence
+    Calcuates proportion of query fields are available
     Args -  
         row (pd): row of data containing confidence scores of candidate profile
     Returns -
@@ -72,8 +86,9 @@ def evidence_coverage(row: pd) -> float:
 
 def strong_evidence_ratio(row: pd.Series) -> float:
     """
-    Returns the amount of evidence field that strongly agree
-    with the candidate.
+    Returns the amount of evidence field that strongly agree with the candidate.
+
+    Strong fields are fields with a simmilarity score of 0.8 or higher
     """
     supplied_values = []
 
@@ -96,7 +111,7 @@ def strong_evidence_ratio(row: pd.Series) -> float:
 
 def birth_date_quality(row: pd) -> str:
     """
-    Provides synopsis for birth year match
+    Provides synopsis for birth year match with query
     """
     score = safe_float(row.get("birth_year_score"))
 
@@ -114,7 +129,7 @@ def birth_date_quality(row: pd) -> str:
 
 def name_quality(row: pd) -> str:
     """
-    Provides synopsis for name match
+    Provides synopsis for full name match
     """
     first = safe_float(row.get("first_name_score")) or 0.0
     last = safe_float(row.get("last_name_score")) or 0.0
@@ -131,14 +146,17 @@ def name_quality(row: pd) -> str:
     return "weak name match"
 
 
-def ambiguity_penalty(row: pd, candidates: pd) -> float:
+def ambiguity_penalty(row: pd.Series, 
+                      candidates: pd.DataFrame) -> float:
     """
-    Calculate ambiguity from the nearest competing candidate score.
+    Calculate ambiguity score from the nearest competing candidate score.
+
+    A lower score difference indicates greater ambiguity and therefore higher penalty
     Args - 
-        row(pd): row of data containing similarity of candidates ranked
-        candidates(Any): containes candidate data
+        row(pd.Series): row of data containing similarity of candidates ranked
+        candidates(pd.DataFrame): containes candidate data
     Returns -
-        float: penalty 0 - 15
+        penalty 0.0 - 15.0
     """
     candidate_score = safe_float(row.get("rank_score"))
 
@@ -147,10 +165,11 @@ def ambiguity_penalty(row: pd, candidates: pd) -> float:
 
     competing_scores = []
 
+    # extracting competiting  candidates
     for index, candidate in candidates.iterrows():
         if row.name in candidates.index and index == row.name:
             continue
-
+        # extracting rank_score from competiting candidates
         competing_score = safe_float(candidate.get("rank_score"))
 
         if competing_score is not None:
@@ -159,11 +178,13 @@ def ambiguity_penalty(row: pd, candidates: pd) -> float:
     if not competing_scores:
         return 0.0
 
+    # Calculating difference in rank_score of competiting candidates
     nearest_difference = min(
         abs(candidate_score - competing_score)
         for competing_score in competing_scores
     )
 
+    # applying penalty depending on rank_score difference
     if nearest_difference >= 20:
         return 0.0
     if nearest_difference >= 10:
@@ -175,14 +196,20 @@ def ambiguity_penalty(row: pd, candidates: pd) -> float:
 
 
 def contradiction_penalty(row: pd.Series) -> float:
-    """Penalise supplied evidence that conflicts with the candidate."""
+    """Penalise candidate that contradicts on gender and location fields
+    
+    Missing fields do no produce penalties
+    """
+
     penalty = 0.0
     gender_score = safe_float(row.get("gender_score"))
     location_score = safe_float(row.get("birth_location_score"))
 
+    # Apply penalty to gender
     if gender_score is not None and gender_score == 0.0:
         penalty += GENDER_CONFLICT_PENALTY
 
+    # Apply penalty to location fields
     if (
         location_score is not None
         and location_score < VERY_LOW_LOCATION_THRESHOLD
@@ -215,12 +242,22 @@ def has_direct_contradiction(row: pd.Series) -> bool:
 
     return False
 
-def calculate_confidence_score(row: pd, candidates: pd) -> float:
+def calculate_confidence_score(row: pd.Series,
+                                candidates: pd.DataFrame) -> float:
     """
-    Convert rank and score into confidence scores
+    Calculate confidence score for a ranked candidate 
+
+    Rank score is used as a base. Confidence score is then adjusted based on evidence coverage,
+    evidence agreement, name agreement, birth year agreement, contradictions
+    and proximity to other candidates
+
+    Score between 0-100 and is an evidence indicator not a statistical probability 
     """
+
+    # Starting of using rank_score
     confidence = safe_float(row.get("rank_score")) or 0.0
 
+    # Calculating coverage, evidence strength, contradictions and penalties
     coverage = evidence_coverage(row)
     evidence_strength = strong_evidence_ratio(row)
     direct_contradiction = has_direct_contradiction(row)
@@ -259,14 +296,16 @@ def calculate_confidence_score(row: pd, candidates: pd) -> float:
 
     # Adding ambiguity penalty to confidence score
     confidence -= ambiguity_penalty(row, candidates)
+    # Adding contradiction penalty to confidence score
     confidence -= direct_contradiction_penalty
+    # clamping score from 0 - 100
     confidence = max(0.0, min(100.0, confidence))
 
     return round(confidence, 2)
 
-def confidence_interpretation(confidence_score):
+def confidence_interpretation(confidence_score: Any) -> str:
     """
-    Placeholder interpertation for confidence score bands
+    Convert confidence score into readable explanation
     """
     score = safe_float(confidence_score) or 0.0
 
@@ -280,14 +319,17 @@ def confidence_interpretation(confidence_score):
     return "Very weak candidate. Likely not reliable without substantial extra evidence."
 
 
-def build_confidence_explanation(row: pd) -> str:
-    """
-    Placeholder explanation for each attribute score
-    """
-    parts = [name_quality(row), birth_date_quality(row)]
+def build_confidence_explanation(row: pd.Series) -> str:
+    """Build a readable summary of the evidence supporting a confidence score.
 
+    The explanation describes name, birth year, birth location and gender
+    agreement as well as overall evidence coverage.
+    """
+    # Extracting name, birth date quality scores  and location scores
+    parts = [name_quality(row), birth_date_quality(row)]
     location_score = safe_float(row.get("birth_location_score"))
-    
+
+    # Applying application to birth location scores
     if location_score is not None:
         if location_score >= 0.5:
             parts.append("strong birth-location match")
@@ -296,16 +338,20 @@ def build_confidence_explanation(row: pd) -> str:
         else:
             parts.append("birth location conflicts with candidate or is missing")
 
+    # extracting gender scores
     gender_score = safe_float(row.get("gender_score"))
 
+    # applying explanation depending on gender score 
     if gender_score is not None:
         if gender_score >= 1.0:
             parts.append("gender match")
         else:
             parts.append("gender conflicts with candidate or is missing")
-    
+
+    # extracting coverage score
     coverage = evidence_coverage(row)
 
+    # applying explanation depending on coverage score
     if coverage >= 0.8:
         if has_direct_contradiction(row):
             parts.append("high evidence coverage with contradictory evidence")
@@ -319,9 +365,9 @@ def build_confidence_explanation(row: pd) -> str:
     return "; ".join(parts) + "."
 
 
-def add_confidence_scores(candidates: pd) -> pd:
+def add_confidence_scores(candidates: pd.DataFrame) -> pd.DataFrame:
     """
-    adding confidence scores and explanation to pandas dataframe
+    adding confidence scores and explanation to ranked candidates
     """
     if candidates.empty:
         return candidates
@@ -329,9 +375,11 @@ def add_confidence_scores(candidates: pd) -> pd:
     df = candidates.copy()
     scores = []
 
+    # Appending confidence scores to candidate rows
     for _, row in df.iterrows():
         scores.append(calculate_confidence_score(row, df))
 
+    # Applying confidence interpretaiton to candidate rows
     df["confidence_score"] = scores
     df["confidence_interpretation"] = df["confidence_score"].apply(confidence_interpretation)
     df["confidence_explanation"] = df.apply(build_confidence_explanation, axis=1)
@@ -349,41 +397,11 @@ def add_confidence_scores(candidates: pd) -> pd:
     return df[front_cols + other_cols]
 
 
-def load_candidate_retriever(module_path):
-    """
-    loads candidate retriever claas from retrieval/candidate_retrieval.py module
-    """
-    module_path = Path(module_path)
-
-    if not module_path.exists() and module_path == DEFAULT_CANDIDATE_MODULE_PATH:
-        old_layout_path = Path("candidate_retrieval.py")
-        if old_layout_path.exists():
-            module_path = old_layout_path
-
-    module_path = module_path.resolve()
-
-    if not module_path.exists():
-        raise FileNotFoundError(f"Could not find {module_path}")
-
-    spec = importlib.util.spec_from_file_location("candidate_retrieval", module_path)
-    if spec is None or spec.loader is None:
-        raise ImportError(f"Could not import module from {module_path}")
-
-    module = importlib.util.module_from_spec(spec)
-    sys.modules["candidate_retrieval"] = module
-    spec.loader.exec_module(module)
-
-    if not hasattr(module, "CandidateRetriever"):
-        raise ImportError(f"{module_path} does not define CandidateRetriever")
-
-    return module.CandidateRetriever
-
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Retrieve candidates and add confidence scores.")
 
     parser.add_argument("--schema-dir", type=Path, default=DEFAULT_SCHEMA_DIR)
-    parser.add_argument("--candidate-module-path", type=Path, default=DEFAULT_CANDIDATE_MODULE_PATH)
     parser.add_argument("--first-name", type=str, default=None)
     parser.add_argument("--last-name", type=str, default=None)
     parser.add_argument("--birth-year", type=int, default=None)
@@ -399,7 +417,6 @@ def parse_args():
 def main():
     args = parse_args()
 
-    CandidateRetriever = load_candidate_retriever(args.candidate_module_path)
     retriever = CandidateRetriever(schema_dir=args.schema_dir)
 
     candidates = retriever.find_candidates(
