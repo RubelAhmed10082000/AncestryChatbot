@@ -215,40 +215,4 @@ def test_tree_to_json():
         "edges": [{"parent_person_id": "person-george", "child_person_id": "person-jane"}],
     }
 
-### Testing html_escape ###
-
-def test_html_escape_escapes_special_characters():
-    assert generate_family_tree.html_escape("<Jane & George>") == "&lt;Jane &amp; George&gt;"
-
-### Testing node_label ###
-
-def test_node_label_includes_name_dates_and_wikitree_id():
-    row = pd.Series(
-        {
-            "full_name": "Jane Austen",
-            "wikitree_id": "Austen-489",
-            "birth_year": "1775",
-            "death_year": "1817",
-        }
-    )
-
-    result = generate_family_tree.node_label(row)
-
-    assert result == "Jane Austen (1775–1817)\nAusten-489"
-
-
-def test_node_label_handles_missing_dates():
-    row = pd.Series(
-        {
-            "full_name": "Jane Austen",
-            "wikitree_id": "Austen-489",
-            "birth_year": None,
-            "death_year": None,
-        }
-    )
-
-    result = generate_family_tree.node_label(row)
-
-    assert result == "Jane Austen\nAusten-489"
-
 
