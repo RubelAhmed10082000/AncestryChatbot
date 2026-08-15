@@ -1,3 +1,5 @@
+/* Global layout */
+
 * {
   box-sizing: border-box;
 }
@@ -36,6 +38,8 @@ body {
   color: #6b7280;
 }
 
+/* Conversation */
+
 .chat-window {
   flex: 1;
   overflow-y: auto;
@@ -64,6 +68,8 @@ body {
   color: white;
   margin-left: auto;
 }
+
+/* Input controls */
 
 .chat-form {
   display: flex;
@@ -96,6 +102,8 @@ body {
   color: #111827;
 }
 
+/* Candidate and tree result panels */
+
 .candidate-card,
 .tree-panel {
   background: white;
@@ -117,6 +125,8 @@ body {
 .confidence {
   font-weight: 700;
 }
+
+/* Family-tree generation groups */
 
 .tree-generation {
   margin-top: 12px;
