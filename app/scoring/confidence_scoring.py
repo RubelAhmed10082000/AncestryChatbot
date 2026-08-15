@@ -444,7 +444,7 @@ def main():
         "full_name",
         "birth_year",
         "birth_location",
-        "confidence_explanation",
+        "confidence_interpretation",
     ]
     display_cols = [col for col in display_cols if col in results.columns]
 
