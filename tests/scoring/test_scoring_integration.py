@@ -42,10 +42,10 @@ def test_confidence_main_writes_output_csv(tmp_path, monkeypatch):
     output_path = tmp_path / "confidence_results.csv"
 
     monkeypatch.setattr(
-        confidence_scoring,
-        "load_candidate_retriever",
-        lambda module_path: FakeCandidateRetriever,
-    )
+    confidence_scoring,
+    "CandidateRetriever",
+    FakeCandidateRetriever,
+)
 
     monkeypatch.setattr(
         confidence_scoring,

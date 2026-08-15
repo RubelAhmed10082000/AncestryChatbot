@@ -1,15 +1,15 @@
 import pytest
 
 import app.scoring.confidence_scoring as confidence_scoring
+from app.retrieval.candidate_retrieval import CandidateRetriever
 
 
 @pytest.mark.e2e
 def test_confidence_real_candidate_retrieval_for_jane_austen():
-    CandidateRetriever = confidence_scoring.load_candidate_retriever(
-        confidence_scoring.DEFAULT_CANDIDATE_MODULE_PATH
-    )
 
-    retriever = CandidateRetriever(schema_dir=confidence_scoring.DEFAULT_SCHEMA_DIR)
+    retriever = CandidateRetriever(
+    schema_dir=confidence_scoring.DEFAULT_SCHEMA_DIR
+)
 
     candidates = retriever.find_candidates(
         first_name="Jane",
