@@ -380,25 +380,6 @@ def tree_to_json(nodes, edges):
         "edges": edges.to_dict(orient="records"),
     }
 
-
-def node_label(row):
-    name = clean_text(row.get("full_name")) or "Unknown person"
-    wikitree_id = clean_text(row.get("wikitree_id"))
-    birth_year = clean_text(row.get("birth_year"))
-    death_year = clean_text(row.get("death_year"))
-
-    dates = ""
-    if birth_year or death_year:
-        dates = f" ({birth_year or '?'}–{death_year or '?'})"
-
-    label = name + dates
-    if wikitree_id:
-        label += f"\n{wikitree_id}"
-
-    return label
-
-
-
 def build_output_dir(base_output_dir, root_wikitree_id, root_person_id):
     folder_name = root_wikitree_id or root_person_id
     safe_name = "".join(ch if ch.isalnum() or ch in {"-", "_"} else "_" for ch in folder_name)
