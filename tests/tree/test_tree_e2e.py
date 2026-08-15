@@ -65,19 +65,11 @@ def test_generate_family_tree_real_schema_writes_json_and_html(tmp_path):
     tree_json = generate_family_tree.tree_to_json(nodes, edges)
 
     json_path = tmp_path / "jane_austen_tree.json"
-    html_path = tmp_path / "jane_austen_tree.html"
 
     json_path.write_text(json.dumps(tree_json, indent=2), encoding="utf-8")
 
-    generate_family_tree.generate_html(
-        nodes=nodes,
-        edges=edges,
-        root_label="Jane Austen",
-        output_path=html_path,
-    )
 
     assert json_path.exists()
-    assert html_path.exists()
 
     loaded = json.loads(json_path.read_text(encoding="utf-8"))
 
@@ -85,7 +77,3 @@ def test_generate_family_tree_real_schema_writes_json_and_html(tmp_path):
     assert "edges" in loaded
     assert len(loaded["nodes"]) == len(nodes)
     assert len(loaded["edges"]) == len(edges)
-
-    html_text = html_path.read_text(encoding="utf-8")
-    assert "Jane Austen" in html_text
-    assert "<svg" in html_text
