@@ -1,5 +1,4 @@
 import argparse
-import html
 import json
 from collections import defaultdict, deque
 from pathlib import Path
@@ -382,11 +381,6 @@ def tree_to_json(nodes, edges):
     }
 
 
-def html_escape(value):
-    text = "" if value is None else str(value)
-    return html.escape(text)
-
-
 def node_label(row):
     name = clean_text(row.get("full_name")) or "Unknown person"
     wikitree_id = clean_text(row.get("wikitree_id"))
@@ -403,154 +397,6 @@ def node_label(row):
 
     return label
 
-
-def generate_html(nodes: pd, edges: pd, root_label: str, output_path: Path) -> None:
-    """
-    Visualizes ancestry tree
-    """
-    output_path = Path(output_path)
-
-    if nodes.empty:
-        output_path.write_text("<html><body><h1>No tree data found</h1></body></html>", encoding="utf-8")
-        return
-
-    generation_groups = defaultdict(list)
-    sorted_nodes = nodes.sort_values(by=["generation", "full_name"])
-
-    for _, row in sorted_nodes.iterrows():
-        generation_groups[int(row["generation"])].append(row["person_id"])
-
-    x_gap = 330
-    y_gap = 120
-    box_w = 240
-    box_h = 74
-    margin_x = 60
-    margin_y = 70
-
-    positions = {}
-    max_rows = max(len(ids) for ids in generation_groups.values())
-    max_generation = max(generation_groups.keys())
-
-    for generation, ids in generation_groups.items():
-        start_y = margin_y + max(0, (max_rows - len(ids)) * y_gap // 2)
-        for index, person_id in enumerate(ids):
-            x = margin_x + generation * x_gap
-            y = start_y + index * y_gap
-            positions[person_id] = (x, y)
-
-    width = margin_x * 2 + (max_generation + 1) * x_gap + box_w
-    height = margin_y * 2 + max_rows * y_gap + box_h
-
-    nodes_by_id = {}
-    for _, row in nodes.iterrows():
-        nodes_by_id[row["person_id"]] = row
-
-    edge_svg = []
-    for _, edge in edges.iterrows():
-        parent = str(edge["parent_person_id"])
-        child = str(edge["child_person_id"])
-
-        if parent not in positions or child not in positions:
-            continue
-
-        px, py = positions[parent]
-        cx, cy = positions[child]
-        rel = clean_text(edge.get("relationship_type")) or "parent_of"
-        dash = "" if rel == "father_of" else " stroke-dasharray='6 4'"
-
-        edge_svg.append(
-            f"<line x1='{px}' y1='{py + box_h / 2}' x2='{cx + box_w}' y2='{cy + box_h / 2}' class='edge'{dash} />"
-        )
-
-    node_svg = []
-    for person_id, position in positions.items():
-        x, y = position
-        row = nodes_by_id[person_id]
-
-        is_root = bool(row.get("is_root"))
-        is_stub = bool(row.get("is_stub"))
-        gender = clean_text(row.get("gender")) or "Unknown"
-        css_class = "node root" if is_root else "node stub" if is_stub else "node"
-        profile_url = clean_text(row.get("profile_url"))
-        label_lines = node_label(row).split("\n")
-        title = html_escape(
-            f"{row.get('full_name')} | {row.get('wikitree_id')} | Born: {row.get('birth_date')} | Died: {row.get('death_date')}"
-        )
-
-        if profile_url:
-            node_svg.append(f"<a href='{html_escape(profile_url)}' target='_blank'>")
-
-        node_svg.append(f"<g class='{css_class}'>")
-        node_svg.append(f"<title>{title}</title>")
-        node_svg.append(f"<rect x='{x}' y='{y}' width='{box_w}' height='{box_h}' rx='10' />")
-
-        for line_index, line in enumerate(label_lines[:3]):
-            font_size = 13 if line_index == 0 else 11
-            dy = 22 + line_index * 18
-            node_svg.append(
-                f"<text x='{x + 12}' y='{y + dy}' font-size='{font_size}'>{html_escape(line)}</text>"
-            )
-
-        node_svg.append(
-            f"<text x='{x + 12}' y='{y + box_h - 10}' font-size='10' class='meta'>{html_escape(gender)}</text>"
-        )
-        node_svg.append("</g>")
-
-        if profile_url:
-            node_svg.append("</a>")
-
-    legend = """
-    <div class="legend">
-      <strong>Legend:</strong>
-      <span class="legend-box root-box"></span> root person
-      <span class="legend-box normal-box"></span> extracted person
-      <span class="legend-line solid-line"></span> father_of / parent link
-      <span class="legend-line dashed-line"></span> mother_of link
-    </div>
-    """
-
-    html_doc = f"""<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <title>Family Tree - {html_escape(root_label)}</title>
-  <style>
-    body {{ font-family: Arial, sans-serif; margin: 24px; background: #f8f9fb; color: #1f2937; }}
-    h1 {{ margin-bottom: 4px; }}
-    .subtitle {{ color: #4b5563; margin-bottom: 16px; }}
-    .canvas {{ background: white; border: 1px solid #d1d5db; border-radius: 12px; overflow: auto; padding: 12px; }}
-    svg {{ min-width: 100%; }}
-    .edge {{ stroke: #6b7280; stroke-width: 2; }}
-    .node rect {{ fill: #ffffff; stroke: #374151; stroke-width: 1.5; }}
-    .node.root rect {{ fill: #eef2ff; stroke: #3730a3; stroke-width: 2.5; }}
-    .node.stub rect {{ fill: #fef2f2; stroke: #991b1b; stroke-width: 1.5; }}
-    .node text {{ fill: #111827; pointer-events: none; }}
-    .node .meta {{ fill: #6b7280; }}
-    .legend {{ margin: 12px 0 18px; color: #374151; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }}
-    .legend-box {{ width: 18px; height: 12px; display: inline-block; border-radius: 3px; margin-right: -8px; }}
-    .root-box {{ background: #eef2ff; border: 1px solid #3730a3; }}
-    .normal-box {{ background: #fff; border: 1px solid #374151; }}
-    .legend-line {{ width: 36px; height: 0; display: inline-block; border-top: 2px solid #6b7280; margin-right: -8px; }}
-    .dashed-line {{ border-top-style: dashed; }}
-    .table-link {{ margin-top: 16px; font-size: 14px; color: #4b5563; }}
-  </style>
-</head>
-<body>
-  <h1>Preliminary Family Tree</h1>
-  <div class="subtitle">Root: <strong>{html_escape(root_label)}</strong>. Ancestors are shown left-to-right by generation.</div>
-  {legend}
-  <div class="canvas">
-    <svg width="{width}" height="{height}" viewBox="0 0 {width} {height}" xmlns="http://www.w3.org/2000/svg">
-      {''.join(edge_svg)}
-      {''.join(node_svg)}
-    </svg>
-  </div>
-  <p class="table-link">This is a preliminary visualisation from local transformed WikiTree data. It should be treated as a starting point for verification, not as final genealogical proof.</p>
-</body>
-</html>
-"""
-
-    output_path.write_text(html_doc, encoding="utf-8")
 
 
 def build_output_dir(base_output_dir, root_wikitree_id, root_person_id):
@@ -602,13 +448,11 @@ def main():
     edges_path = output_dir / "family_tree_edges.csv"
     summary_path = output_dir / "family_tree_summary.csv"
     json_path = output_dir / "family_tree.json"
-    html_path = output_dir / "family_tree.html"
 
     nodes.to_csv(nodes_path, index=False)
     edges.to_csv(edges_path, index=False)
     summary.to_csv(summary_path, index=False)
     json_path.write_text(json.dumps(tree_to_json(nodes, edges), indent=2, ensure_ascii=False), encoding="utf-8")
-    generate_html(nodes, edges, root_label, html_path)
 
     print("Family tree generated.")
     print(f"Root:          {root_label} ({root_wikitree_id or root_person_id})")
@@ -616,7 +460,6 @@ def main():
     print(f"Nodes:         {len(nodes)}")
     print(f"Edges:         {len(edges)}")
     print(f"Output folder: {output_dir}")
-    print(f"HTML:          {html_path}")
     print(f"Nodes CSV:     {nodes_path}")
     print(f"Edges CSV:     {edges_path}")
     print(f"JSON:          {json_path}")
