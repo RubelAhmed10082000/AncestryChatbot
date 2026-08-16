@@ -1,3 +1,15 @@
+"""
+Runs retrieval and confidence evaluation
+
+Loads retrieval cases and evaluates each case against candidates
+Rankings bolstered by confidence scores before expected profile 
+rank, Top-k accuracy, reciprocal rank, score
+margin and tie status are recorded.
+
+Summaries produced overall and for each input condition.
+Failed, ambiguous or fragile retrievals identified.
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -21,10 +33,11 @@ DEFAULT_CASES_PATH = Path("data/evaluation/evaluation_cases.csv")
 DEFAULT_SCHEMA_DIR = Path("data/wikitree_schema")
 DEFAULT_OUTPUT_DIR = Path("data/evaluation")
 
-TOP_K = 5
+# Setting up evaluation definition
+TOP_K = 5 # Only evaluating retrieval  with top-5 ranking
 MIN_SCORE = 0.0
-TOP_SCORE_TIE_TOLERANCE = 0.001
-AMBIGUITY_MARGIN_THRESHOLD = 5.0
+TOP_SCORE_TIE_TOLERANCE = 0.001 # Scores are considered tied if they differ by this value
+AMBIGUITY_MARGIN_THRESHOLD = 5.0 # Candidate is flagged if score is within 5.0 of another candidate 
 
 RESULTS_FILENAME = "evaluation_results.csv"
 SUMMARY_FILENAME = "evaluation_summary.csv"
@@ -32,6 +45,7 @@ FAILURES_FILENAME = "failure_cases.csv"
 AMBIGUITY_CASES_FILENAME = "ambiguity_cases.csv"
 CONFIDENCE_SUMMARY_FILENAME = "confidence_summary.csv"
 
+# Listing expected test conditions
 EXPECTED_CONDITIONS = (
     "full_profile",
     "name_year",
@@ -42,6 +56,7 @@ EXPECTED_CONDITIONS = (
     "wrong_gender",
 )
 
+# Requried fields for evaluation
 REQUIRED_CASE_COLUMNS = {
     "case_id",
     "seed_label",
@@ -54,6 +69,7 @@ REQUIRED_CASE_COLUMNS = {
     "gender",
 }
 
+# Listing scoring columns
 SCORE_COLUMNS = (
     "first_name_score",
     "last_name_score",
@@ -64,7 +80,7 @@ SCORE_COLUMNS = (
 
 
 def clean_optional_text(value: Any) -> str | None:
-    """Convert blank or missing CSV values to ``None``."""
+    """Convert blank or missing CSV values to None"""
     if value is None:
         return None
 
@@ -79,7 +95,7 @@ def clean_optional_text(value: Any) -> str | None:
 
 
 def parse_optional_year(value: Any) -> int | None:
-    """Parse evaluation years such as ``1835`` or ``1835.0``."""
+    """Parse years such as 1800.0"""
     text = clean_optional_text(value)
 
     if text is None:
@@ -97,7 +113,7 @@ def parse_optional_year(value: Any) -> int | None:
 
 
 def value_or_none(value: Any) -> Any:
-    """Return ``None`` for pandas missing values while preserving other types."""
+    """Return None for missing values while avoiding error"""
     if value is None:
         return None
 
@@ -111,25 +127,36 @@ def value_or_none(value: Any) -> Any:
 
 
 def load_evaluation_cases(path: Path = DEFAULT_CASES_PATH) -> pd.DataFrame:
-    """Load and validate the deterministic evaluation-case matrix."""
+    """Load and validate evaluation cases.
+    
+    Validation checks required columns, unique case identifiers, expected
+    WikiTree IDs, seven condition set and complete condition
+    coverage for every evaluation profile
+    """
+
+    # Checks file exists
     if not path.exists():
         raise FileNotFoundError(
             f"Missing evaluation cases: {path}. "
             "Run scripts/create_evaluation_cases.py first."
         )
 
+    # loading case file and checking if required columns exist
     cases = pd.read_csv(path, dtype=str, keep_default_na=False)
     missing_columns = REQUIRED_CASE_COLUMNS - set(cases.columns)
 
+    # raising error if mssing columns required for evaluation 
     if missing_columns:
         raise ValueError(
             "evaluation_cases.csv is missing required columns: "
             f"{sorted(missing_columns)}"
         )
 
+    # checking if cases are empty
     if cases.empty:
         raise ValueError("evaluation_cases.csv contains no cases.")
 
+    # checking for duplicated case_id
     if cases["case_id"].duplicated().any():
         duplicate_ids = cases.loc[
             cases["case_id"].duplicated(keep=False),
@@ -137,6 +164,7 @@ def load_evaluation_cases(path: Path = DEFAULT_CASES_PATH) -> pd.DataFrame:
         ].unique()
         raise ValueError(f"Duplicate evaluation case IDs: {sorted(duplicate_ids)}")
 
+    # Checking for missing expepected ids
     missing_expected_ids = cases["expected_wikitree_id"].map(clean_optional_text).isna()
 
     if missing_expected_ids.any():
@@ -146,6 +174,7 @@ def load_evaluation_cases(path: Path = DEFAULT_CASES_PATH) -> pd.DataFrame:
             f"{invalid_cases}"
         )
 
+    # CHecking for missing condition values
     actual_conditions = set(cases["condition"])
     expected_conditions = set(EXPECTED_CONDITIONS)
 
@@ -155,6 +184,7 @@ def load_evaluation_cases(path: Path = DEFAULT_CASES_PATH) -> pd.DataFrame:
             f"Expected {sorted(expected_conditions)}, got {sorted(actual_conditions)}."
         )
 
+    # CHecking for mismatching condition counts
     condition_counts = cases.groupby("expected_wikitree_id")["condition"].nunique()
     incomplete_profiles = condition_counts[condition_counts != len(EXPECTED_CONDITIONS)]
 
@@ -167,16 +197,18 @@ def load_evaluation_cases(path: Path = DEFAULT_CASES_PATH) -> pd.DataFrame:
     return cases
 
 
-def reciprocal_rank(rank: int | None) -> float:
-    """Return reciprocal rank, or zero when the expected candidate was absent."""
+def reciprocal_rank(rank: int) -> float:
+    """Return reciprocal rank, or zero when the expected candidate is absent
+    """
     if rank is None or rank <= 0:
         return 0.0
 
+    # Returning rank divided by position 
     return round(1.0 / rank, 6)
 
 
-def failure_reason(expected_rank: int | None, candidate_count: int) -> str | None:
-    """Classify the observable rank failure without inferring an unsupported cause."""
+def failure_reason(expected_rank: int, candidate_count: int) -> str :
+    """Explaining why candidate outside Top_K"""
     if expected_rank == 1:
         return None
     if candidate_count == 0:
@@ -188,7 +220,14 @@ def failure_reason(expected_rank: int | None, candidate_count: int) -> str | Non
 
 
 def top_score_diagnostics(candidates: pd.DataFrame) -> dict[str, Any]:
-    """Describe the top-score margin and any tie within the fixed tolerance."""
+    """Calculate ambiguity for highest ranked candidate
+    
+    The top score is compared with the second place score and all candidates
+    within tie tolerance. This records score margin,
+    if the highest score is tied and how many candidates share the near topscore
+    """
+
+    # building diagnostics dict
     diagnostics = {
         "second_candidate_wikitree_id": None,
         "second_candidate_rank_score": None,
@@ -200,25 +239,33 @@ def top_score_diagnostics(candidates: pd.DataFrame) -> dict[str, Any]:
     if candidates.empty:
         return diagnostics
 
+    # retrieving candidate rank score
     rank_scores = pd.to_numeric(candidates["rank_score"], errors="coerce")
+    # retrieving top scoring candidate
     top_score = value_or_none(rank_scores.iloc[0])
 
+    # Finding all scores that are within the Tie Tolerance from the top_score
     if top_score is not None:
         diagnostics["top_score_tie_size"] = int(
             (rank_scores.sub(float(top_score)).abs() <= TOP_SCORE_TIE_TOLERANCE).sum()
         )
 
+    # Returning candidates that are within the tie tolerane of top score
     if len(candidates) < 2:
         return diagnostics
 
+    # getting second top ranked candidate
     second_candidate = candidates.iloc[1]
     second_score = value_or_none(rank_scores.iloc[1])
     diagnostics["second_candidate_wikitree_id"] = clean_optional_text(
         second_candidate.get("wikitree_id")
     )
+
+    
     diagnostics["second_candidate_rank_score"] = second_score
 
     if top_score is not None and second_score is not None:
+        # calculating margin between top scorer and second top scorer
         score_margin = round(float(top_score) - float(second_score), 6)
         diagnostics["score_margin"] = score_margin
         diagnostics["top_score_tie"] = (
@@ -233,9 +280,26 @@ def evaluate_cases(
     cases: pd.DataFrame,
     confidence_scorer: Any = add_confidence_scores,
 ) -> pd.DataFrame:
-    """Run every case through one retriever instance and return one row per case."""
-    result_rows: list[dict[str, Any]] = []
+    """Run every case through retriever instance and return case
+    
+    Case is normalised into query fields used by the application,
+    passed through candidate retrieval and then through confidence scoring
+    
+    Expected WikiTree rank is recorded with Top-k, reciprocal rank,
+    score-margin, field level scores and confidence scores
 
+    Args -
+        retriever(Any): Candidate retriever
+        cases(pd.DataFrame): Validated evaluation case
+        confidence_scorer(Any): Function used to add confidence information.
+
+    Returns - 
+        One detailed result row per evaluation case
+    """
+
+    result_rows = []
+
+    # Extracting fields from cases
     for _, case in cases.iterrows():
         first_name = clean_optional_text(case.get("first_name"))
         last_name = clean_optional_text(case.get("last_name"))
@@ -254,6 +318,7 @@ def evaluate_cases(
             min_score=MIN_SCORE,
         )
 
+        # Counting candidates, vaidating scores and providing confidence scores
         candidates = confidence_scorer(candidates)
         candidate_count = len(candidates)
         score_diagnostics = top_score_diagnostics(candidates)
@@ -376,7 +441,7 @@ def result_groups(results: pd.DataFrame):
 
 
 def build_evaluation_summary(results: pd.DataFrame) -> pd.DataFrame:
-    """Aggregate rank and confidence metrics overall and by input condition."""
+    """Combine rank and confidence metrics overall and by input condition."""
     summary_rows = []
 
     for scope, condition, group in result_groups(results):
