@@ -1,7 +1,15 @@
+"""
+Generate the retrieval cases used by evaluation.
+
+Cases written to data/evaluation/evaluation_cases.csv and
+are inputs to the retrieval evaluation script.
+"""
+
 from pathlib import Path
 
 import pandas as pd
-
+from typing import Any
+from app.data_pipeline.transform import clean_text
 
 INPUT_DIR = Path("data/wikitree_test")
 OUTPUT_DIR = Path("data/evaluation")
@@ -10,7 +18,7 @@ SEED_PROFILES_FILE = INPUT_DIR / "seed_profiles.csv"
 PEOPLE_FILE = INPUT_DIR / "people.csv"
 OUTPUT_FILE = OUTPUT_DIR / "evaluation_cases.csv"
 
-
+# Fields needed for evaluation
 REQUIRED_ROOT_FIELDS = [
     "first_name",
     "last_name_at_birth",
@@ -19,26 +27,7 @@ REQUIRED_ROOT_FIELDS = [
     "gender",
 ]
 
-
-def clean_text(value) -> str | None:
-    """
-    Convert blank and missing values to None.
-    """
-    if value is None:
-        return None
-
-    if pd.isna(value):
-        return None
-
-    text = str(value).strip()
-
-    if text in {"", "nan", "NaN", "None", "null", "NULL"}:
-        return None
-
-    return text
-
-
-def extract_birth_year(birth_date) -> int | None:
+def extract_birth_year(birth_date: Any) -> int | None:
     """
     Extract the four-digit year from a WikiTree date.
     """
@@ -47,8 +36,10 @@ def extract_birth_year(birth_date) -> int | None:
     if birth_date is None:
         return None
 
+    # Splitting DOB and extracting year by using "-" as a delimiter
     year_text = birth_date.split("-")[0]
 
+    # turning year into Int
     try:
         year = int(year_text)
     except ValueError:
@@ -62,11 +53,7 @@ def extract_birth_year(birth_date) -> int | None:
 
 def introduce_typo(value: str | None) -> str | None:
     """
-    Create one deterministic adjacent-character transposition.
-
-    Examples:
-        Austen -> Ausetn
-        Darwin -> Dawrin
+    Introduces non-random typos string by transposing one character 
     """
     value = clean_text(value)
 
@@ -75,11 +62,13 @@ def introduce_typo(value: str | None) -> str | None:
 
     characters = list(value)
 
+    # finding index of transposed character
     index = max(1, (len(characters) // 2) - 1)
 
     if index >= len(characters) - 1:
         index = len(characters) - 2
 
+    # tranposing character
     characters[index], characters[index + 1] = (
         characters[index + 1],
         characters[index],
@@ -90,17 +79,14 @@ def introduce_typo(value: str | None) -> str | None:
 
 def shorten_location(value: str | None) -> str | None:
     """
-    Reduce a detailed location to its final two components.
-
-    Example:
-        Steventon, Hampshire, England
-        becomes Hampshire, England
+    Reduce a detailed location string to two components.
     """
     value = clean_text(value)
 
     if value is None:
         return None
 
+    # Splitting location into two components (e.g. city and county)
     components = [
         component.strip()
         for component in value.split(",")
@@ -140,8 +126,23 @@ def make_case(
     perturbation_notes: str,
 ) -> dict:
     """
-    Build one evaluation-case record.
+    Build one evaluation case record.
+
+    Args -
+        seed_label(str): Label of the evaluation root
+        expected_wikitree_id(str): WikiTreeID expected to rank first
+        condition(str): Evaluation condition name
+        first_name(str): Query first name
+        last_name(str): Query surname
+        birth_year(int): Query birth year
+        birth_location(str): Query birth location
+        gender(str): Query gender
+        perturbation_notes(str): Description of the condition
+    
+    Returns -
+        Dictionary that is one row of evaluation_cases.csv
     """
+
     return {
         "case_id": f"{expected_wikitree_id}__{condition}",
         "seed_label": seed_label,
@@ -156,22 +157,33 @@ def make_case(
     }
 
 
-def build_cases_for_profile(row: pd.Series) -> list[dict]:
+def build_cases_for_profile(
+    row: pd.Series,
+) -> list[dict]:
     """
-    Create the seven evaluation conditions for one ground-truth profile.
+    Create the seven evaluation conditions for one profile
+
+    test conditions: full profile, name and year, name only, noisy input,
+    wrong year, wrong location and wrong gender.
     """
+
+    # Extracting and cleaning gender, birth location, birth  year, 
+    # first name, last name and WikiTreeID
     seed_label = clean_text(row["seed_label"])
     expected_wikitree_id = clean_text(row["wikitree_id"])
 
     first_name = clean_text(row["first_name"])
+    # Birth surname preferred over current
     last_name = (
         clean_text(row["last_name_at_birth"])
         or clean_text(row["last_name_current"])
     )
+
     birth_year = extract_birth_year(row["birth_date"])
     birth_location = clean_text(row["birth_location"])
     gender = clean_text(row["gender"])
 
+    # Creating cases
     cases = [
         make_case(
             seed_label=seed_label,
@@ -182,7 +194,7 @@ def build_cases_for_profile(row: pd.Series) -> list[dict]:
             birth_year=birth_year,
             birth_location=birth_location,
             gender=gender,
-            perturbation_notes="All available identifying fields supplied correctly.",
+            perturbation_notes="Full profile, all fields correct",
         ),
         make_case(
             seed_label=seed_label,
@@ -193,7 +205,7 @@ def build_cases_for_profile(row: pd.Series) -> list[dict]:
             birth_year=birth_year,
             birth_location=None,
             gender=None,
-            perturbation_notes="Only first name, surname and birth year supplied.",
+            perturbation_notes="Only first name, surname and birth year",
         ),
         make_case(
             seed_label=seed_label,
@@ -204,7 +216,7 @@ def build_cases_for_profile(row: pd.Series) -> list[dict]:
             birth_year=None,
             birth_location=None,
             gender=None,
-            perturbation_notes="Only first name and surname supplied.",
+            perturbation_notes="Only first name and surname",
         ),
         make_case(
             seed_label=seed_label,
@@ -216,7 +228,7 @@ def build_cases_for_profile(row: pd.Series) -> list[dict]:
             birth_location=shorten_location(birth_location),
             gender=gender,
             perturbation_notes=(
-                "One adjacent-character surname typo and a shortened "
+                "One surname typo and a shortened "
                 "birth location."
             ),
         ),
@@ -229,7 +241,7 @@ def build_cases_for_profile(row: pd.Series) -> list[dict]:
             birth_year=birth_year + 20,
             birth_location=birth_location,
             gender=gender,
-            perturbation_notes="Birth year increased by exactly 20 years.",
+            perturbation_notes="Birth year increased by 20 years",
         ),
         make_case(
             seed_label=seed_label,
@@ -240,10 +252,8 @@ def build_cases_for_profile(row: pd.Series) -> list[dict]:
             birth_year=birth_year,
             birth_location="Tokyo, Japan",
             gender=gender,
-            perturbation_notes=(
-                "Birth location replaced with the unrelated location "
-                "'Tokyo, Japan'."
-            ),
+            perturbation_notes="Birth location replaced with Tokyo, Japan"
+
         ),
         make_case(
             seed_label=seed_label,
@@ -254,7 +264,7 @@ def build_cases_for_profile(row: pd.Series) -> list[dict]:
             birth_year=birth_year,
             birth_location=birth_location,
             gender=opposite_gender(gender),
-            perturbation_notes="Gender replaced with the opposite dataset value.",
+            perturbation_notes="Genders switched",
         ),
     ]
 
@@ -262,9 +272,18 @@ def build_cases_for_profile(row: pd.Series) -> list[dict]:
 
 
 def load_evaluation_roots() -> pd.DataFrame:
+    """Load seed profiles and join to person records
+
+    Seed labels and expected WikiTreeIDs read from seed_profiles.csv and
+    joined with people.csv so the fields
+    required for case generation are available
+
+    Returns - 
+        Joined evaluation DataFrame.
     """
-    Join seed labels and expected WikiTree IDs to their complete profiles.
-    """
+
+
+    # Raising error if seed or people files do not exist
     if not SEED_PROFILES_FILE.exists():
         raise FileNotFoundError(
             f"Missing seed profiles: {SEED_PROFILES_FILE}"
@@ -275,6 +294,7 @@ def load_evaluation_roots() -> pd.DataFrame:
             f"Missing people data: {PEOPLE_FILE}"
         )
 
+    # loading seeds and people files
     seeds = pd.read_csv(
         SEED_PROFILES_FILE,
         dtype=str,
@@ -300,6 +320,8 @@ def load_evaluation_roots() -> pd.DataFrame:
             f"{sorted(missing_seed_columns)}"
         )
 
+    # Merging seed leable and expected WikiTreeID with people table
+    # Validating that merge is 1-1 cardinality 
     roots = seeds[
         ["seed_label", "wikitree_id"]
     ].merge(
@@ -309,6 +331,7 @@ def load_evaluation_roots() -> pd.DataFrame:
         validate="one_to_one",
     )
 
+    # Checking if there are seeds with missing person
     missing_profiles = roots[
         roots["person_id"].map(clean_text).isna()
     ]
@@ -325,9 +348,15 @@ def load_evaluation_roots() -> pd.DataFrame:
 
 
 def validate_roots(roots: pd.DataFrame) -> None:
+    """Validate that every evaluation root has all seven test conditions
+
+    Relevant fields have to be present and each birth date has to contain
+    a valid year
+
+    Args -
+        roots(pd.DataFrame): Joined evaluation records
     """
-    Fail before evaluation when a root lacks required test data.
-    """
+
     errors = []
 
     for _, row in roots.iterrows():
@@ -361,13 +390,16 @@ def main() -> None:
 
     evaluation_cases = []
 
+    # Building evaluation cases from root profiles
     for _, row in roots.iterrows():
         evaluation_cases.extend(
             build_cases_for_profile(row)
         )
 
+    # building cases DatFrame
     cases_df = pd.DataFrame(evaluation_cases)
 
+    # Listing expected evaluation conditions
     expected_conditions = {
         "full_profile",
         "name_year",
@@ -378,13 +410,16 @@ def main() -> None:
         "wrong_gender",
     }
 
+    # Seeing how  many conditions are possible with cases DataFrame
     actual_conditions = set(cases_df["condition"])
 
+    # If they don't match then we raise an error
     if actual_conditions != expected_conditions:
         raise ValueError(
             "Evaluation conditions do not match the required set."
         )
 
+    # Validating that case counts are expected
     expected_case_count = len(roots) * len(expected_conditions)
 
     if len(cases_df) != expected_case_count:
