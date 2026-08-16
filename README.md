@@ -59,9 +59,25 @@ Start the local web server:
 python run.py serve
 ```
 
-Open [http://127.0.0.1:8000] in a browser. The chabot asks for a first name, surname, birth year, birth location and gender. Only the first name and surname are required. Currently, only the below seed figures work:
+Open [http://127.0.0.1:8000](http://127.0.0.1:8000) in a browser. The chatbot asks for a first name, surname, birth year, birth location and gender. Only the first name and surname are required, but the other fields usually produce a clearer result.
 
-A simple demonstration is:
+The application does not search every profile on WikiTree. It searches the records contained with this project in `data/wikitree_test/`. The nine seed figures below are the supported figures. Some ancestors and alternative candidate records are also present in the local data, but an arbitrary person from WikiTree will not be found unless their record is included in this dataset.
+
+| Figure | First name | Surname | Birth year | Birth location | Gender |
+| --- | --- | --- | --- | --- | --- |
+| Samuel Langhorne Clemens (Mark Twain) | Samuel | Clemens | 1835 | Florida, Monroe, Missouri, United States | Male |
+| Aretha Franklin | Aretha | Franklin | 1942 | Memphis, Shelby, Tennessee, United States | Female |
+| Charles Darwin | Charles | Darwin | 1809 | Shrewsbury, Shropshire, England | Male |
+| Jane Austen | Jane | Austen | 1775 | Steventon, Hampshire, England | Female |
+| Isaac Newton | Isaac | Newton | 1642 | Woolsthorpe by Colsterworth, Lincolnshire, England | Male |
+| William Shakespeare | William | Shakespeare | 1564 | Stratford-upon-Avon, Warwickshire, England | Male |
+| Florence Nightingale | Florence | Nightingale | 1820 | Firenze, Firenze, Tuscany, Italy | Female |
+| Winston Churchill | Winston | Churchill | 1874 | Blenheim Palace, Woodstock, Oxfordshire, England | Male |
+| Isambard Kingdom Brunel | Isambard | Brunel | 1806 | Portsea, Hampshire, England | Male |
+
+These values match the submitted dataset. Shorter locations may still work, but the full values above are useful when demonstrating the system.
+
+For example, enter:
 
 ```text
 First name: Jane
@@ -88,7 +104,7 @@ It runs four stages in order:
 3. Runs the retrieval and confidence evaluation
 4. Runs the family-tree evaluation
 
-The pipeline stops if a stage . It uses the data included in `data/wikitree_test/` and does not contact WikiTree.
+The pipeline stops if a stage fails. It uses the data included in `data/wikitree_test/` and does not contact WikiTree.
 
 The main results are written to `data/evaluation/final/`:
 
@@ -119,7 +135,7 @@ To include the live WikiTree API test, run:
 python run.py test -q
 ```
 
-The full command needs an internet connection. A failure in `tests/extract/test_extract_e2e.py` can indicate that WikiTree is unavailable or that its live data has changed it does not necessarily mean the frozen local pipeline has failed.
+The full command needs an internet connection. A failure in `tests/extract/test_extract_e2e.py` can indicate that WikiTree is unavailable or that its live data has changed. It does not necessarily mean the frozen local pipeline has failed.
 
 ## Other useful commands
 
