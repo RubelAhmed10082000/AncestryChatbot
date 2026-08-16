@@ -47,9 +47,41 @@ Run `python run.py help` to see the available commands. The launcher runs each m
 
 The submitted dataset, application, pipeline and evaluation scripts can be used offline if the Python packages have been installed.
 
+The submitted version was tested on Windows with Python 3.13.5. The package versions used for testing are fixed in `requirements.txt`.
+
 ## Setup
 
-Extract the submitted ZIP file, open a terminal in the `AncestryChatbot` folder, and create a virtual environment.
+Extract the submitted ZIP file and open a terminal in the `AncestryChatbot` folder. The commands below create an isolated Python environment and install the required packages.
+
+### Windows PowerShell
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+python run.py help
+```
+
+If PowerShell prevents the activation script from running, use the environment without activating it:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe run.py help
+```
+
+### macOS or Linux
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+python run.py help
+```
+
+If the help screen lists the available commands, the setup is complete. Keep the virtual environment active while using the commands in the rest of this guide.
 
 ## Run the application
 
