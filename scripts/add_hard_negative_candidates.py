@@ -1,3 +1,11 @@
+"""
+Add alternative WikiTree search matches
+
+The script reads raw WikiTree search responses and extracts alternative profiles 
+These are merged into people.csv and become 
+hard negative candidates during retrieval evaluation.
+"""
+
 from __future__ import annotations
 
 import json
@@ -7,12 +15,14 @@ from pathlib import Path
 import pandas as pd
 
 
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from app.data_pipeline.extract import add_search_candidates, flatten_api_profiles
+from app.data_pipeline.transform import read_csv_required
 
 
 INPUT_DIR = Path("data/wikitree_test")
@@ -20,14 +30,6 @@ RAW_SEARCH_RESULTS_FILE = INPUT_DIR / "raw_search_results.json"
 PEOPLE_FILE = INPUT_DIR / "people.csv"
 SEED_PROFILES_FILE = INPUT_DIR / "seed_profiles.csv"
 MANIFEST_FILE = INPUT_DIR / "hard_negative_candidates.csv"
-
-
-def read_csv_required(path: Path) -> pd.DataFrame:
-    if not path.exists():
-        raise FileNotFoundError(f"Missing required input: {path}")
-
-    return pd.read_csv(path, dtype=str, keep_default_na=False)
-
 
 def load_raw_search_results(path: Path) -> dict:
     if not path.exists():
@@ -46,27 +48,42 @@ def merge_hard_negative_candidates(
     people: pd.DataFrame,
     seeds: pd.DataFrame,
     raw_search_results: dict,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Merge non-root search matches into people and return an audit manifest."""
+) -> tuple:
+    """Merge alternative search matches into people table
+    
+    Args -
+        people(pd.DataFrame): people records
+        seeds(pd.DataFrame):  Evaluation roots that must not become hard negatives
+        raw_search_results(dict): WikiTree search responses
+
+    Returns -
+        Tuple containing the expanded people DataFrame and the hard negative
+        audit manifest.
+    """
+
     required_people_columns = {"wikitree_id", "person_id"}
     required_seed_columns = {"seed_label", "wikitree_id"}
 
+    # Raising error if people.csv or seed.csv missing required columns
     if missing := required_people_columns - set(people.columns):
         raise ValueError(f"people.csv is missing columns: {sorted(missing)}")
 
     if missing := required_seed_columns - set(seeds.columns):
         raise ValueError(f"seed_profiles.csv is missing columns: {sorted(missing)}")
 
+    # Collects known seed_ids and WikiTreeID
     seed_ids = {
         str(value).strip()
         for value in seeds["wikitree_id"]
         if str(value).strip()
     }
+
     people_by_wikitree_id = {
         row["wikitree_id"]: row
         for row in people.to_dict(orient="records")
         if row.get("wikitree_id")
     }
+
     manifest_rows = []
     manifested_ids = set()
     initially_searchable_ids = set(people_by_wikitree_id)
