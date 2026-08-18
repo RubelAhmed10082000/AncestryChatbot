@@ -542,7 +542,7 @@ def main():
     )
 
     if results.empty:
-        print("No candidates found. Try lowering --min-score or providing more query fields.")
+        print("No candidates found")
         return
 
     display_cols = []
