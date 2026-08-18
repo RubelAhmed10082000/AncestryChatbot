@@ -1,15 +1,3 @@
-"""
-Runs retrieval and confidence evaluation
-
-Loads retrieval cases and evaluates each case against candidates
-Rankings bolstered by confidence scores before expected profile 
-rank, Top-k accuracy, reciprocal rank, score
-margin and tie status are recorded.
-
-Summaries produced overall and for each input condition.
-Failed, ambiguous or fragile retrievals identified.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -79,8 +67,7 @@ SCORE_COLUMNS = (
 )
 
 
-def clean_optional_text(value: Any) -> str | None:
-    """Convert blank or missing CSV values to None"""
+def clean_optional_text(value):
     if value is None:
         return None
 
@@ -94,8 +81,7 @@ def clean_optional_text(value: Any) -> str | None:
     return text or None
 
 
-def parse_optional_year(value: Any) -> int | None:
-    """Parse years such as 1800.0"""
+def parse_optional_year(value):
     text = clean_optional_text(value)
 
     if text is None:
@@ -112,8 +98,7 @@ def parse_optional_year(value: Any) -> int | None:
     return int(numeric_year)
 
 
-def value_or_none(value: Any) -> Any:
-    """Return None for missing values while avoiding error"""
+def value_or_none(value):
     if value is None:
         return None
 
@@ -126,13 +111,7 @@ def value_or_none(value: Any) -> Any:
     return value
 
 
-def load_evaluation_cases(path: Path = DEFAULT_CASES_PATH) -> pd.DataFrame:
-    """Load and validate evaluation cases.
-    
-    Validation checks required columns, unique case identifiers, expected
-    WikiTree IDs, seven condition set and complete condition
-    coverage for every evaluation profile
-    """
+def load_evaluation_cases(path = DEFAULT_CASES_PATH):
 
     # Checks file exists
     if not path.exists():
@@ -197,9 +176,7 @@ def load_evaluation_cases(path: Path = DEFAULT_CASES_PATH) -> pd.DataFrame:
     return cases
 
 
-def reciprocal_rank(rank: int) -> float:
-    """Return reciprocal rank, or zero when the expected candidate is absent
-    """
+def reciprocal_rank(rank):
     if rank is None or rank <= 0:
         return 0.0
 
@@ -207,8 +184,7 @@ def reciprocal_rank(rank: int) -> float:
     return round(1.0 / rank, 6)
 
 
-def failure_reason(expected_rank: int, candidate_count: int) -> str :
-    """Explaining why candidate outside Top_K"""
+def failure_reason(expected_rank, candidate_count):
     if expected_rank == 1:
         return None
     if candidate_count == 0:
@@ -219,14 +195,7 @@ def failure_reason(expected_rank: int, candidate_count: int) -> str :
     return "expected_candidate_ranked_below_first"
 
 
-def top_score_diagnostics(candidates: pd.DataFrame) -> dict[str, Any]:
-    """Calculate ambiguity for highest ranked candidate
-    
-    The top score is compared with the second place score and all candidates
-    within tie tolerance. This records score margin,
-    if the highest score is tied and how many candidates share the near topscore
-    """
-
+def top_score_diagnostics(candidates):
     # building diagnostics dict
     diagnostics = {
         "second_candidate_wikitree_id": None,
@@ -275,27 +244,7 @@ def top_score_diagnostics(candidates: pd.DataFrame) -> dict[str, Any]:
     return diagnostics
 
 
-def evaluate_cases(
-    retriever: Any,
-    cases: pd.DataFrame,
-    confidence_scorer: Any = add_confidence_scores,
-) -> pd.DataFrame:
-    """Run every case through retriever instance and return case
-    
-    Case is normalised into query fields used by the application,
-    passed through candidate retrieval and then through confidence scoring
-    
-    Expected WikiTree rank is recorded with Top-k, reciprocal rank,
-    score-margin, field level scores and confidence scores
-
-    Args -
-        retriever(Any): Candidate retriever
-        cases(pd.DataFrame): Validated evaluation case
-        confidence_scorer(Any): Function used to add confidence information.
-
-    Returns - 
-        One detailed result row per evaluation case
-    """
+def evaluate_cases(retriever, cases, confidence_scorer = add_confidence_scores):
 
     result_rows = []
 
@@ -354,7 +303,7 @@ def evaluate_cases(
             "birth_year": birth_year,
             "birth_location": birth_location,
             "gender": gender,
-            "perturbation_notes": clean_optional_text(case.get("perturbation_notes")),
+            "notes": clean_optional_text(case.get("notes")),
             "candidate_count": candidate_count,
             "expected_rank": expected_rank,
             "top_1_correct": top_1_correct,
@@ -404,8 +353,7 @@ def evaluate_cases(
     return results
 
 
-def mean_or_none(series: pd.Series) -> float | None:
-    """Calculate a rounded numeric mean, preserving an empty group as missing."""
+def mean_or_none(series):
     values = pd.to_numeric(series, errors="coerce").dropna()
 
     if values.empty:
@@ -414,8 +362,7 @@ def mean_or_none(series: pd.Series) -> float | None:
     return round(float(values.mean()), 6)
 
 
-def minimum_or_none(series: pd.Series) -> float | None:
-    """Return a rounded numeric minimum, preserving an empty group as missing."""
+def minimum_or_none(series):
     values = pd.to_numeric(series, errors="coerce").dropna()
 
     if values.empty:
@@ -424,24 +371,21 @@ def minimum_or_none(series: pd.Series) -> float | None:
     return round(float(values.min()), 6)
 
 
-def rate_or_none(series: pd.Series) -> float | None:
-    """Return a rounded boolean rate, preserving an empty group as missing."""
+def rate_or_none(series):
     if series.empty:
         return None
 
     return round(float(series.mean()), 6)
 
 
-def result_groups(results: pd.DataFrame):
-    """Yield the overall result set followed by each condition in fixed order."""
+def result_groups(results):
     yield "overall", "all", results
 
     for condition in EXPECTED_CONDITIONS:
         yield "condition", condition, results[results["condition"] == condition]
 
 
-def build_evaluation_summary(results: pd.DataFrame) -> pd.DataFrame:
-    """Combine rank and confidence metrics overall and by input condition."""
+def build_evaluation_summary(results):
     summary_rows = []
 
     for scope, condition, group in result_groups(results):
@@ -484,13 +428,11 @@ def build_evaluation_summary(results: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(summary_rows)
 
 
-def build_failure_cases(results: pd.DataFrame) -> pd.DataFrame:
-    """Return all cases where the expected profile was not ranked first."""
+def build_failure_cases(results):
     return results.loc[~results["top_1_correct"]].reset_index(drop=True)
 
 
-def ambiguity_reasons(row: pd.Series) -> str:
-    """Explain why a result needs ambiguity or retrieval-fragility analysis."""
+def ambiguity_reasons(row):
     reasons = []
 
     if not row["top_1_correct"]:
@@ -507,8 +449,8 @@ def ambiguity_reasons(row: pd.Series) -> str:
     return ";".join(reasons)
 
 
-def build_ambiguity_cases(results: pd.DataFrame) -> pd.DataFrame:
-    """Return ambiguous or fragile retrievals without calling them failures."""
+def build_ambiguity_cases(results):
+
     score_margins = pd.to_numeric(results["score_margin"], errors="coerce")
     analysis_mask = (
         (~results["top_1_correct"])
@@ -527,8 +469,7 @@ def build_ambiguity_cases(results: pd.DataFrame) -> pd.DataFrame:
     return analysis_cases.reset_index(drop=True)
 
 
-def confidence_statistics(group: pd.DataFrame) -> dict[str, Any]:
-    """Summarise available top-candidate confidence scores for one group."""
+def confidence_statistics(group):
     scores = pd.to_numeric(group["top_confidence_score"], errors="coerce").dropna()
 
     if scores.empty:
@@ -549,8 +490,7 @@ def confidence_statistics(group: pd.DataFrame) -> dict[str, Any]:
     }
 
 
-def build_confidence_summary(results: pd.DataFrame) -> pd.DataFrame:
-    """Summarise top-candidate confidence by condition and Top-1 outcome."""
+def build_confidence_summary(results):
     summary_rows = []
 
     for scope, condition, group in result_groups(results):
@@ -574,11 +514,8 @@ def build_confidence_summary(results: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(summary_rows)
 
 
-def write_outputs(
-    results: pd.DataFrame,
-    output_dir: Path = DEFAULT_OUTPUT_DIR,
-) -> dict[str, Path]:
-    """Build and write the formal evaluation output files."""
+def write_outputs(results, output_dir = DEFAULT_OUTPUT_DIR):
+
     output_dir.mkdir(parents=True, exist_ok=True)
 
     outputs = {
