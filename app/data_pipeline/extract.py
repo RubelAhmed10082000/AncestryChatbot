@@ -379,19 +379,19 @@ def process_seed(seed, raw_search_results, raw_ancestor_results, selected_seeds,
 
     selected = choose_best_search_match(seed, search_response)
     if not selected:
-        print(f"  No match found for {label}")
+        print(f" No match found for {label}")
         return
 
     profile_key = selected.get("Name")
     if not profile_key:
-        print(f"  Match found but no WikiTree Name/key for {label}")
+        print(f"Match found but no WikiTree Name/key for {label}")
         return
 
-    print(f"  Selected WikiTree profile: {profile_key}")
+    print(f"WikiTree profile: {profile_key}")
 
     time.sleep(REQUEST_DELAY_SECONDS)
 
-    print(f"  Fetching ancestors depth={ANCESTOR_DEPTH}")
+    print(f"Ancestor depth={ANCESTOR_DEPTH}")
     ancestor_response = get_ancestors(
         profile_key,
         depth=ANCESTOR_DEPTH,
