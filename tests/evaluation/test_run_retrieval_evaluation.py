@@ -37,7 +37,7 @@ def make_cases():
                 "birth_year": "1775.0",
                 "birth_location": "",
                 "gender": "",
-                "perturbation_notes": "Names and year supplied.",
+                "notes": "Names and year supplied.",
             },
             {
                 "case_id": "Missing-1__name_year",
@@ -49,7 +49,7 @@ def make_cases():
                 "birth_year": "1900",
                 "birth_location": "",
                 "gender": "",
-                "perturbation_notes": "No matching candidate.",
+                "notes": "No matching candidate.",
             },
         ]
     )
