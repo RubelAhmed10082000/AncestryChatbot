@@ -31,17 +31,17 @@ def show_help():
     print("Usage: python run.py <command> [options]\n")
     print("Available commands:")
 
-    print("  pipeline")
+    print("pipeline")
     for command in COMMANDS:
-        print(f"  {command}")
+        print(f"{command}")
 
     print("\nExamples:")
-    print("  python run.py pipeline")
-    print("  python run.py transform")
-    print("  python run.py evaluate-retrieval")
-    print("  python run.py evaluate-tree")
-    print("  python run.py serve --reload")
-    print("  python run.py test -q")
+    print("python run.py pipeline")
+    print("python run.py transform")
+    print("python run.py evaluate-retrieval")
+    print("python run.py evaluate-tree")
+    print("python run.py serve --reload")
+    print("python run.py test -q")
 
 
 def run_command(command_name, options=None):
