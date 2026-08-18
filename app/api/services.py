@@ -1,8 +1,3 @@
-"""
-Connects API layer to candidate retrieval, confidence scoring
-and family tree generation modules.
-"""
-
 from pathlib import Path
 import math
 import pandas as pd
