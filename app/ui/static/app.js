@@ -1,11 +1,3 @@
-/**
- * Browser-side logic for the genealogy retrieval interface.
- *
- * Collects input, sends requests to the FastAPI
- * backend, renders ranked candidate results, and displays the ancestor tree
- * returned for a selected WikiTree profile.
- */
-
 const chatWindow = document.getElementById("chat-window");
 const chatForm = document.getElementById("chat-form");
 const chatInput = document.getElementById("chat-input");
@@ -42,14 +34,6 @@ const questions = [
 let stepIndex = 0;
 let profile = {};
 
-/**
- * Append a text message to the chat window.
- *
- * @param {string} role - Message role used for styling
- * @param {string} text - Text displayed in the message.
- * @returns {HTMLDivElement} The created message element.
- */
-
 function addMessage(role, text) {
   const message = document.createElement("div");
   message.className = `message ${role}`;
@@ -59,13 +43,6 @@ function addMessage(role, text) {
   return message;
 }
 
-/**
- * Append DOM element inside a styled chat message.
- *
- * @param {string} role - Message role used for styling.
- * @param {HTMLElement} element - DOM content to display.
- */
-
 function addHtmlMessage(role, element) {
   const wrapper = document.createElement("div");
   wrapper.className = `message ${role}`;
@@ -74,22 +51,11 @@ function addHtmlMessage(role, element) {
   chatWindow.scrollTop = chatWindow.scrollHeight;
 }
 
-/** Display the current question in conversation. */
 function askCurrentQuestion() {
   const question = questions[stepIndex];
   addMessage("assistant", question.text);
 }
 
-/**
- * Convert a user answer into the value expected by the API.
- *
- * Blank optional answers become null and birth years are converted to
- * integers. Other supplied answers remain as strings.
- *
- * @param {{key: string}} question - Question associated with the answer.
- * @param {string} rawAnswer - Raw value entered by the user.
- * @returns {string|number|null} Normalised profile value.
- */
 function normaliseAnswer(question, rawAnswer) {
   const answer = rawAnswer.trim();
 
@@ -104,14 +70,6 @@ function normaliseAnswer(question, rawAnswer) {
 
   return answer;
 }
-
-/**
- * Submit the profile to the candidate search API.
- *
- * five query fields collected by the conversation are sent
- * FastAPI backend. Up to five ranked candidates are requested and the
- * returned results are passed to the candidate renderer.
- */
 
 async function searchCandidates() {
   addMessage("assistant", "Searching for candidate profiles...");
@@ -146,16 +104,6 @@ async function searchCandidates() {
     addMessage("assistant", `Something went wrong: ${error.message}`);
   }
 }
-
-/**
- * Render ranked candidate profiles returned by API.
- *
- * Each candidate card has rank, identity information, retrieval score,
- * confidence information and explanation. Candidates with a WikiTree ID also
- * receive a button for requesting their ancestor tree.
- *
- * @param {Object} data - Candidate search response returned by the API.
- */
 
 function renderCandidates(data) {
   if (!data.candidates || data.candidates.length === 0) {
@@ -227,11 +175,6 @@ function renderCandidates(data) {
   addHtmlMessage("assistant", container);
 }
 
-/**
- * Request ancestor tree for WikiTree profile.
- *
- * @param {string} wikitreeId - WikiTree identifier of the selected root profile.
- */
 async function loadTree(wikitreeId) {
   addMessage("assistant", `Generating family tree for ${wikitreeId}...`);
 
@@ -252,14 +195,6 @@ async function loadTree(wikitreeId) {
   }
 }
 
-/**
- * Render tree nodes grouped by ancestor generation.
- *
- *  root is displayed as generation 0, followed by each returned ancestor
- * generation in order. browser view presents the tree as generation groups
- *
- * @param {Object} tree - Tree response returned by the API.
- */
 function renderTree(tree) {
   const panel = document.createElement("div");
   panel.className = "tree-panel";
