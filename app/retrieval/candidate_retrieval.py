@@ -1,16 +1,3 @@
-"""
-Retrieve and rank candidates 
-
-Builds a searchable candidate index from the Person, Name and Event
-tables. Fields compared with each candidate
-using similarity functions.
-
-Weighting added and  and then adjusted
-using fixed ranking rules. Missing query fields excluded 
-
-Candidates returned ranked with field scores.
-"""
-
 import argparse
 import math
 import re
@@ -51,17 +38,10 @@ DISPLAY_COLUMNS = [
 
 
 class CandidateRetriever:
-    """Load records and return ranked candidate matches.
-
-    Builds search index from the Person, Name and
-    Event tables. Fields compared final ranking score.
-    """
     DEFAULT_WEIGHTS = DEFAULT_WEIGHTS
 
     def __init__(self, schema_dir=DEFAULT_SCHEMA_DIR, weights=None):
-        """Loads Name, Person, Event tables. 
-        Selects weights and produces search index
-        """
+
         self.schema_dir = Path(schema_dir)
         self.weights = weights or self.DEFAULT_WEIGHTS
 
@@ -70,9 +50,8 @@ class CandidateRetriever:
         self.event_df = self._read_required_csv(EVENT_FILE)
         self.index_df = self._build_search_index()
 
-    def _read_required_csv(self, filename: str) -> pd.DataFrame:
-        """Loads .csv schema file as Pandas DataFrame
-        """
+    def _read_required_csv(self, filename):
+
         path = self.schema_dir / filename
 
         if not path.exists():
@@ -81,15 +60,6 @@ class CandidateRetriever:
         return pd.read_csv(path, dtype=str, keep_default_na=False)
 
     def _build_search_index(self):
-        """
-        Creates searchable index for each candidate profile
-
-        Person and Name records merged with birth and death event.
-
-        Dataframe contains both identity and event fields 
-        Return - 
-            pandas dataframe: merged dataframe with people, name and events
-        """
 
         # Starting with People, Name and Events table
         people = self.person_df.copy()
@@ -177,16 +147,8 @@ class CandidateRetriever:
 
         return people
 
-    def _build_full_name(self, row: list) -> str:
-        """
-        Combines first, middle and last names to build full name
+    def _build_full_name(self, row):
 
-        Birth surname priortised over other surnames
-        Args -
-            row (list): list of names
-        Returns -
-            list: list of full names
-        """
         # Cleaning each name 
         parts = [
             clean_text(row.get("First_Name")),
@@ -205,35 +167,14 @@ class CandidateRetriever:
 
     def find_candidates(
         self,
-        first_name: str | None = None,
-        last_name: str | None = None,
-        birth_year: int | None = None,
-        birth_location: str | None = None,
-        gender: str | None = None,
-        top_k: int = 5,
-        min_score: float=0.0,
+        first_name = None,
+        last_name = None,
+        birth_year = None,
+        birth_location = None,
+        gender = None,
+        top_k = 5,
+        min_score = 0.0,
     ):
-        """Rank candidate profiles against evidence.
-
-            Each query field is compared with field. 
-            Field similarities combined using the weights and ranks are adjusted
-
-            Missing query fields does not affected to weighting. Candidate
-            records are sorted by adjusted rank score with field-level scores used as
-            deterministic secondary ordering criteria.
-
-            Args -
-                first_name(str): Query first name.
-                last_name(str): Query surname.
-                birth_year(int): Query birth year.
-                birth_location(str): Query birth location.
-                gender(str): Query gender.
-                top_k(int): Maximum number of candidates to return.
-                min_score(float): Minimum rank score for inclusion.
-
-            Returns -
-                A DataFrame containing the highest-ranked candidate profiles.
-        """
         rows = []
 
         # matching candidates by ranking similarity of attribute values provided
@@ -307,10 +248,8 @@ class CandidateRetriever:
         return results.head(top_k)
 
 
-def clean_text(value: str) -> str | None:
-    """
-    Cleans text and turns unrecognised values to None
-    """
+def clean_text(value):
+
     if value is None:
         return None
 
@@ -326,12 +265,8 @@ def clean_text(value: str) -> str | None:
     return text or None
 
 
-def normalise_for_matching(value: str) -> str:
-    """
-    Standardizes text for matching
+def normalise_for_matching(value):
 
-    Text is turned to lowercase and punctuation and whitespaces stripped
-    """
     text = clean_text(value)
 
     if text is None:
@@ -344,10 +279,8 @@ def normalise_for_matching(value: str) -> str:
     return text
 
 
-def token_set(value: Any) -> set[str]:
-    """
-    Splits text into tokens
-    """
+def token_set(value):
+
     text = normalise_for_matching(value)
 
     if not text:
@@ -356,17 +289,8 @@ def token_set(value: Any) -> set[str]:
     return set(text.split())
 
 
-def sequence_similarity(left: str, right: str) -> float:
-    """
-    Compares string similarity of string and returns similarity ratio
+def sequence_similarity(left, right):
 
-    A score of 1.0 represents complete string match and 0.0 reperesents complete unmatched strings
-    Args - 
-        left (str): left string - compared to right 
-        right (str): right string - compared to left
-    Returns - 
-        ratio of similarity between left and right
-    """
     left = normalise_for_matching(left)
     right = normalise_for_matching(right)
 
@@ -376,12 +300,7 @@ def sequence_similarity(left: str, right: str) -> float:
     return SequenceMatcher(None, left, right).ratio()
 
 
-def token_overlap_similarity(left: str, right: str) -> float:
-    """Return token similarity using intersection of union.
-
-    Ignores token order and supports partial matches
-    between locations containing different levels of geographic detail.
-    """
+def token_overlap_similarity(left, right):
 
     left_tokens = token_set(left)
     right_tokens = token_set(right)
@@ -394,18 +313,7 @@ def token_overlap_similarity(left: str, right: str) -> float:
     return len(left_tokens & right_tokens) / len(left_tokens | right_tokens)
 
 
-def best_string_similarity(query_value: Any, candidate_values: list[str]) -> int:
-    """
-    Returns the highest similarity score between two strings
-
-    Missing field returns NaN. 
-    If no candidate value available then score defaults to 0.0
-    Args - 
-        query value(str): canonical string
-        candidate_value(dict): string that will be comapred to query value for similarity 
-    Returns -
-       Maximum score 
-    """
+def best_string_similarity(query_value, candidate_values):
 
     if clean_text(query_value) is None:
         return math.nan
@@ -422,21 +330,8 @@ def best_string_similarity(query_value: Any, candidate_values: list[str]) -> int
     return max(scores)
 
 
-def best_location_similarity(query_location: Any, candidate_location: str) -> float:
-    """
-    Compares string similiarity of locations between query and candidate
+def best_location_similarity(query_location, candidate_location):
 
-    Missing query value results in NaN value
-
-    Missing candidate value defaults score to 0.0
-    Args -
-        query_location(str): location used in query 
-        query originates from user but is converted by LLM layer 
-
-        candidate_location(str): location(s) retrieved by LLM and compared to query 
-    Returns -
-        similarity score between candidate and query locations strings
-    """
     if clean_text(query_location) is None:
         return math.nan
 
@@ -451,23 +346,8 @@ def best_location_similarity(query_location: Any, candidate_location: str) -> fl
     return max(char_score, token_score)
 
 
-def year_similarity(query_year: Any, candidate_year: 
-                    Any, max_difference: int=20) -> float:
-    """
-    Compares similarity between candidate birth year and query birth year
+def year_similarity(query_year, candidate_year, max_difference = 20):
 
-    Exact match is scored as 1.0 with 0.0 for complete unmatch
-
-    Score degrades the greater the year gap
-
-    Missing query returns NaN
-    Args - 
-        query_year(int): year used in retrieval 
-        candidate_year(int): year(s) of event that is compared to the query year 
-        max_difference(int): buffer, in years, where match can still be valid
-    Returns -
-        Difference between candidate and query years
-    """
     # Return None if query year is None
     if query_year is None:
         return math.nan
@@ -494,17 +374,8 @@ def year_similarity(query_year: Any, candidate_year:
     return 1.0 - (diff / max_difference)
 
 
-def gender_similarity(query_gender: str, candidate_gender: str) -> float:
-    """
-    Determines if gender of query is the same as candidate
+def gender_similarity(query_gender, candidate_gender):
 
-    Matching values score 1.0 while contradicting scores 0.0
-    Args -
-        query_gender(str): gender used in retrieval
-        candidate_gender(str): gender of candidate profile
-    Returns -
-        float: 1.0 == genders are matched, 0.0 means they are unmatched 
-    """
     query = clean_text(query_gender)
 
     if query is None:
@@ -519,15 +390,7 @@ def gender_similarity(query_gender: str, candidate_gender: str) -> float:
     return 1.0 if query.lower()[0] == candidate.lower()[0] else 0.0
 
 
-def weighted_score(scores: dict[str], weights: dict[str]) -> float:
-    """
-    Uses all field scores for profile to produce a weighted for each field
-    Args -
-        scores(dict): Similairty scores for each candidate profile attributes
-        weights(dict): weight value given to each profile attribute
-    Returns
-        weighted score of candidate profile attribute
-    """
+def weighted_score(scores, weights):
 
     numerator = 0.0
     denominator = 0.0
@@ -555,22 +418,8 @@ def weighted_score(scores: dict[str], weights: dict[str]) -> float:
     return round((numerator / denominator) * 100, 2)
 
 
-def adjust_score(score: float, scores: dict[str, float], 
-                 query_birth_year: Any, candidate_birth_year: Any) -> float:
+def adjust_score(score, scores, query_birth_year, candidate_birth_year):
 
-    """
-    Adjusts scoring for candidate profile based on similarity scores of particular attributes
-
-    Exact agreement on first name, last name birth year increases score while weaker similarity reduce score.
-
-    Args -
-        score(float): total score of candidate profile
-        scores(dict): scores for every attribute of candidate profile
-        query_birth_year(any): birth year used in retrieval
-        candidate_birth_year(any): birth year of candidate profile
-    Returns - 
-        float: adjusted score
-    """
     # Getting all values
     first = scores.get("first_name_score", math.nan)
     last = scores.get("last_name_score", math.nan)
@@ -628,18 +477,8 @@ def is_missing_number(value):
         return True
 
 
-def explain_matches(scores: dict) -> str:
-    """Summarises strength of match of candidate field with query.
+def explain_matches(scores):
 
-    Similarities 0.8 or higher are as strong matches
-    positive lower similarities are described as partial matches. Missing
-    query fields omitted from explanation.
-    
-    Args - 
-        scores(dict): scores for record matching
-    Returns - 
-        string: placeholder explanation for ranking 
-    """
     labels = {
         "first_name_score": "first name",
         "last_name_score": "last name",
