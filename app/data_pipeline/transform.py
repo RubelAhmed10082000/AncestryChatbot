@@ -516,7 +516,7 @@ def save_outputs(person_table, names_table, event_table, id_crosswalk, rejection
 
 
 def print_summary(person_table, names_table, event_table, rejections, quality_report):
-    print("Transformation complete.")
+    print("Transformation sucessful")
     print(f"Person rows: {len(person_table)} -> {PERSON_OUTPUT}")
     print(f"Names rows: {len(names_table)} -> {NAMES_OUTPUT}")
     print(f"Event rows: {len(event_table)} -> {EVENT_OUTPUT}")
