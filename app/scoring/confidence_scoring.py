@@ -1,13 +1,3 @@
-"""
-Calculate confidence scores for ranked candidates.
-
-Confidence is the amount of supplied evidence,
-the strength of agreement across that evidence, direct contradictions, and
-ambiguity caused by other ranked candidates.
-
-Confidence score are evidence indicators not calibrated probabilities of identity. 
-"""
-
 import argparse
 from pathlib import Path
 import pandas as pd
@@ -44,12 +34,7 @@ FRONT_COLUMNS = [
 ]
 
 
-def safe_float(value: Any) -> float | None:
-    """
-    Converts values into float
-
-    Returns None if value missing or invalid
-    """
+def safe_float(value):
 
     if value is None:
         return None
@@ -66,14 +51,8 @@ def safe_float(value: Any) -> float | None:
         return None
 
 
-def evidence_coverage(row: pd) -> float:
-    """
-    Calcuates proportion of query fields are available
-    Args -  
-        row (pd): row of data containing confidence scores of candidate profile
-    Returns -
-        float: ratio of strong column values compared to total available column values
-    """
+def evidence_coverage(row):
+
     supplied = 0
 
     for columns in SCORE_COLUMNS:
@@ -84,12 +63,8 @@ def evidence_coverage(row: pd) -> float:
 
     return supplied / len(SCORE_COLUMNS)
 
-def strong_evidence_ratio(row: pd.Series) -> float:
-    """
-    Returns the amount of evidence field that strongly agree with the candidate.
+def strong_evidence_ratio(row):
 
-    Strong fields are fields with a simmilarity score of 0.8 or higher
-    """
     supplied_values = []
 
     for column in SCORE_COLUMNS:
@@ -109,10 +84,8 @@ def strong_evidence_ratio(row: pd.Series) -> float:
     return strong_matches / len(supplied_values)
 
 
-def birth_date_quality(row: pd) -> str:
-    """
-    Provides synopsis for birth year match with query
-    """
+def birth_date_quality(row):
+
     score = safe_float(row.get("birth_year_score"))
 
     if score is None:
@@ -127,10 +100,8 @@ def birth_date_quality(row: pd) -> str:
     return "birth year missing or mismatch"
 
 
-def name_quality(row: pd) -> str:
-    """
-    Provides synopsis for full name match
-    """
+def name_quality(row):
+
     first = safe_float(row.get("first_name_score")) or 0.0
     last = safe_float(row.get("last_name_score")) or 0.0
 
@@ -146,18 +117,8 @@ def name_quality(row: pd) -> str:
     return "weak name match"
 
 
-def ambiguity_penalty(row: pd.Series, 
-                      candidates: pd.DataFrame) -> float:
-    """
-    Calculate ambiguity score from the nearest competing candidate score.
+def ambiguity_penalty(row, candidates):
 
-    A lower score difference indicates greater ambiguity and therefore higher penalty
-    Args - 
-        row(pd.Series): row of data containing similarity of candidates ranked
-        candidates(pd.DataFrame): containes candidate data
-    Returns -
-        penalty 0.0 - 15.0
-    """
     candidate_score = safe_float(row.get("rank_score"))
 
     if candidate_score is None or len(candidates) < 2:
@@ -195,12 +156,8 @@ def ambiguity_penalty(row: pd.Series,
     return 15.0
 
 
-def contradiction_penalty(row: pd.Series) -> float:
-    """Penalise candidate that contradicts on gender and location fields
-    
-    Missing fields do no produce penalties
-    """
-
+def contradiction_penalty(row):
+  
     penalty = 0.0
     gender_score = safe_float(row.get("gender_score"))
     location_score = safe_float(row.get("birth_location_score"))
@@ -219,8 +176,8 @@ def contradiction_penalty(row: pd.Series) -> float:
     return penalty
 
 
-def has_direct_contradiction(row: pd.Series) -> bool:
-    """Return whether any supplied evidence directly conflicts with a candidate."""
+def has_direct_contradiction(row):
+
     location_score = safe_float(row.get("birth_location_score"))
 
     if (
@@ -242,17 +199,7 @@ def has_direct_contradiction(row: pd.Series) -> bool:
 
     return False
 
-def calculate_confidence_score(row: pd.Series,
-                                candidates: pd.DataFrame) -> float:
-    """
-    Calculate confidence score for a ranked candidate 
-
-    Rank score is used as a base. Confidence score is then adjusted based on evidence coverage,
-    evidence agreement, name agreement, birth year agreement, contradictions
-    and proximity to other candidates
-
-    Score between 0-100 and is an evidence indicator not a statistical probability 
-    """
+def calculate_confidence_score(row, candidates):
 
     # Starting of using rank_score
     confidence = safe_float(row.get("rank_score")) or 0.0
@@ -303,10 +250,8 @@ def calculate_confidence_score(row: pd.Series,
 
     return round(confidence, 2)
 
-def confidence_interpretation(confidence_score: Any) -> str:
-    """
-    Convert confidence score into readable explanation
-    """
+def confidence_interpretation(confidence_score):
+
     score = safe_float(confidence_score) or 0.0
 
     if score >= 90:
@@ -319,12 +264,8 @@ def confidence_interpretation(confidence_score: Any) -> str:
     return "Very weak candidate. Likely not reliable without substantial extra evidence."
 
 
-def build_confidence_explanation(row: pd.Series) -> str:
-    """Build a readable summary of the evidence supporting a confidence score.
+def build_confidence_explanation(row):
 
-    The explanation describes name, birth year, birth location and gender
-    agreement as well as overall evidence coverage.
-    """
     # Extracting name, birth date quality scores  and location scores
     parts = [name_quality(row), birth_date_quality(row)]
     location_score = safe_float(row.get("birth_location_score"))
@@ -365,10 +306,8 @@ def build_confidence_explanation(row: pd.Series) -> str:
     return "; ".join(parts) + "."
 
 
-def add_confidence_scores(candidates: pd.DataFrame) -> pd.DataFrame:
-    """
-    adding confidence scores and explanation to ranked candidates
-    """
+def add_confidence_scores(candidates):
+
     if candidates.empty:
         return candidates
 
