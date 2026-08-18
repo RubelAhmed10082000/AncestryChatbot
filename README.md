@@ -51,37 +51,7 @@ The submitted version was tested on Windows with Python 3.13.5. The package vers
 
 ## Setup
 
-Extract the submitted ZIP file and open a terminal in the `AncestryChatbot` folder. The commands below create an isolated Python environment and install the required packages.
-
-### Windows PowerShell
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-python run.py help
-```
-
-If PowerShell prevents the activation script from running, use the environment without activating it:
-
-```powershell
-.\.venv\Scripts\python.exe -m pip install --upgrade pip
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-.\.venv\Scripts\python.exe run.py help
-```
-
-### macOS or Linux
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-python run.py help
-```
-
-If the help screen lists the available commands, the setup is complete. Keep the virtual environment active while using the commands in the rest of this guide.
+Extract the submitted ZIP file and open a terminal in the `AncestryChatbot` folder. Please create an isolated Python environment and install the required packages.
 
 ## Run the application
 
@@ -91,7 +61,7 @@ Start the local web server:
 python run.py serve
 ```
 
-Open [http://127.0.0.1:8000](http://127.0.0.1:8000) in a browser. The chatbot asks for a first name, surname, birth year, birth location and gender. Only the first name and surname are required, but the other fields usually produce a clearer result.
+Open [http://127.0.0.1:8000] in a browser. The chatbot asks for a first name, surname, birth year, birth location and gender. Only the first name and surname are required, but the other fields usually produce a clearer result.
 
 The application does not search every profile on WikiTree. It searches the records contained with this project in `data/wikitree_test/`. The nine seed figures below are the supported figures. Some ancestors and alternative candidate records are also present in the local data, but an arbitrary person from WikiTree will not be found unless their record is included in this dataset.
 
@@ -107,7 +77,7 @@ The application does not search every profile on WikiTree. It searches the recor
 | Winston Churchill | Winston | Churchill | 1874 | Blenheim Palace, Woodstock, Oxfordshire, England | Male |
 | Isambard Kingdom Brunel | Isambard | Brunel | 1806 | Portsea, Hampshire, England | Male |
 
-These values match the submitted dataset. Shorter locations may still work, but the full values above are useful when demonstrating the system.
+These values match the submitted dataset. Shorter locations can still work, but the full values above are useful when demonstrating the system.
 
 For example, enter:
 
@@ -132,7 +102,7 @@ python run.py pipeline
 It runs four stages in order:
 
 1. Transforms the WikiTree records 
-2. Recreates the retrieval evaluation cases
+2. Recreates the evaluation cases
 3. Runs the retrieval and confidence evaluation
 4. Runs the family-tree evaluation
 
@@ -151,7 +121,6 @@ The main results are written to `data/evaluation/final/`:
 | `tree_evaluation_results.csv` | Result for each evaluated family tree. |
 | `tree_discrepancies.csv` | Missing or unexpected nodes, edges and generations. |
 
-Because these files are regenerated, Git may show them as changed if formatting or library behaviour differs between environments.
 
 ## Run the tests
 
@@ -168,8 +137,6 @@ python run.py test -q
 ```
 
 The full command needs an internet connection. A failure in `tests/extract/test_extract_e2e.py` can indicate that WikiTree is unavailable or that its live data has changed. It does not necessarily mean the frozen local pipeline has failed.
-
-## Other useful commands
 
 ### Search for candidates in the terminal
 
@@ -221,39 +188,15 @@ This process needs an internet connection and overwrites files in `data/wikitree
 | Command | Action |
 | --- | --- |
 | `serve` | Starts the web application. Options such as `--reload` and `--port 8001` are passed to Uvicorn. |
-| `pipeline` | Runs transformation and both evaluations from start to finish. |
-| `test` | Runs Pytest. Extra Pytest options are passed through. |
-| `transform` | Rebuilds the structured schema from the frozen raw data. |
-| `create-cases` | Rebuilds the retrieval evaluation cases. |
+| `pipeline` | Runs transformation and both evaluations from start to finish |
+| `test` | Runs Pytest. Extra Pytest options are passed through |
+| `transform` | Rebuilds the structured schema from the frozen raw data |
+| `create-cases` | Rebuilds the retrieval evaluation cases |
 | `evaluate-retrieval` | Runs candidate-retrieval and confidence evaluation. |
-| `evaluate-tree` | Runs family-tree evaluation. |
-| `search` | Searches for ranked candidate records from the terminal. |
-| `confidence` | Searches for candidates and adds confidence scores. |
-| `tree` | Generates a tree for a WikiTree ID or internal person ID. |
-| `extract` | Downloads current seed and ancestor records from WikiTree. |
-| `hard-negatives` | Adds alternative search matches to the candidate data. |
+| `evaluate-tree` | Runs family-tree evaluation |
+| `search` | Searches for ranked candidate records from the terminal |
+| `confidence` | Searches for candidates and adds confidence scores |
+| `tree` | Generates a tree for a WikiTree ID or internal person ID |
+| `extract` | Downloads current seed and ancestor records from WikiTree |
+| `hard-negatives` | Adds alternative search matches to the candidate data |
 
-## Troubleshooting
-
-**`ModuleNotFoundError` or a missing command**  
-Check that the virtual environment is active and run `python -m pip install -r requirements.txt` again.
-
-**A script works with `python -m` but not when its file path is used**  
-Use `python run.py <command>`. The launcher sets the correct working directory and module path.
-
-**Port 8000 is already in use**  
-Run `python run.py serve --port 8001`, then open `http://127.0.0.1:8001`.
-
-**Schema CSV files are missing**  
-Run `python run.py transform`, or run the complete pipeline.
-
-**The live WikiTree test fails**  
-Check the internet connection and try again later. Use the offline test command above when checking the submitted implementation.
-
-## Scope and limitations
-
-- The included dataset is a small research sample built from public WikiTree profiles of historical figures. It is not a general index of every WikiTree record.
-- Candidate ranking uses names, birth year, location and gender. It does not establish identity or biological relationship.
-- Confidence values are "rule of thumb" indicators based on the available matching evidence. They are not calibrated probabilities.
-- The family tree follows parent relationships in the submitted data. Missing or incorrect source records will affect the generated tree.
-- The interface runs locally and does not store user queries in a database.
