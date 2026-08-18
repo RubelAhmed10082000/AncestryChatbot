@@ -396,7 +396,7 @@ def main():
     json_path.write_text(json.dumps(tree_to_json(nodes, edges), indent=2, ensure_ascii=False), encoding="utf-8")
 
     print("Family tree generated.")
-    print(f"Root: {root_label} ({root_wikitree_id or root_person_id})")
+    print(f"Root:{root_label} ({root_wikitree_id or root_person_id})")
     print(f"Generations: {args.generations}")
     print(f"Nodes: {len(nodes)}")
     print(f"Edges: {len(edges)}")
