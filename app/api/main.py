@@ -1,10 +1,3 @@
-"""
-FastAPI interface for prototype.
-
-Retrieval, confidence scoring and tree traversal are implemented in their
-modules rather than inside the API routes.
-"""
-
 from app.api.schema import CandidateSearchRequest, CandidateSearchResponse
 from app.api.services import search_candidate, tree
 from fastapi import FastAPI, HTTPException, Query, Request
@@ -29,7 +22,6 @@ app.mount(
 
 @app.get("/", response_class=HTMLResponse)
 def chatbot_ui(request: Request):
-    """Serve interface."""
     return templates.TemplateResponse(
         request=request,
         name="index.html",
@@ -42,17 +34,6 @@ def health_check():
 
 @app.post("/api/candidates/search", response_model=CandidateSearchResponse)
 def search_candidates(request: CandidateSearchRequest):
-    """Return ranked candidates.
-
-    Validation is handled by Pydantic model. 
-
-    Args -
-        request(CandidateSearchRequest): Candidate search parameters.
-
-    Returns -
-        Original query, number of returned candidates and
-        ranked results.
-    """
     try:
         candidates = search_candidate(
             first_name=request.first_name,
@@ -80,17 +61,6 @@ def get_tree_by_person_id(
     generations: int = Query(default=3, ge=0, le=6),
     include_missing_stubs: bool = False,
 ):
-    """Generate an ancestor tree from Person ID.
-    
-    Args -
-        person_id(str): identifier for root person.
-        generations(int): Maximum ancestor generation to traverse.
-        include_missing_stubs(bool): Decides if unresolved linked profiles may appear as
-        placeholder nodes.
-
-    Returns -
-            Tree metadata together with generated nodes and edges.
-    """
     try:
         return tree(
             person_id=person_id,
@@ -112,9 +82,6 @@ def get_tree_by_wikitree_id(
     generations: int = Query(default=3, ge=0, le=6),
     include_missing_stubs: bool = False,
 ):
-    """
-    Generate ancestor tree from a WikiTreeID.
-    """
     try:
         return tree(
             wikitree_id=wikitree_id,
