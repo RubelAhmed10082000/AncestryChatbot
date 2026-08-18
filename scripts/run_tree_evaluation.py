@@ -1128,8 +1128,8 @@ def main() -> None:
     print(
         "Discrepancies: " f"{len(discrepancies_df)}"
     )
-    print(f"Results: {RESULTS_FILE}")
-    print(f"Summary: {SUMMARY_FILE}")
+    print(f"Results:{RESULTS_FILE}")
+    print(f"Summary:{SUMMARY_FILE}")
     print(
         f"Discrepancies: {DISCREPANCIES_FILE}"
     )

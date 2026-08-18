@@ -1,10 +1,3 @@
-"""
-Generate the retrieval cases used by evaluation.
-
-Cases written to data/evaluation/evaluation_cases.csv and
-are inputs to the retrieval evaluation script.
-"""
-
 from pathlib import Path
 
 import pandas as pd
