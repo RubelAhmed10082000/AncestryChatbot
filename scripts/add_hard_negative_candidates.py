@@ -1,11 +1,3 @@
-"""
-Add alternative WikiTree search matches
-
-The script reads raw WikiTree search responses and extracts alternative profiles 
-These are merged into people.csv and become 
-hard negative candidates during retrieval evaluation.
-"""
-
 from __future__ import annotations
 
 import json
@@ -31,7 +23,7 @@ PEOPLE_FILE = INPUT_DIR / "people.csv"
 SEED_PROFILES_FILE = INPUT_DIR / "seed_profiles.csv"
 MANIFEST_FILE = INPUT_DIR / "hard_negative_candidates.csv"
 
-def load_raw_search_results(path: Path) -> dict:
+def load_raw_search_results(path) :
     if not path.exists():
         raise FileNotFoundError(f"Missing required input: {path}")
 
@@ -39,27 +31,12 @@ def load_raw_search_results(path: Path) -> dict:
         raw_search_results = json.load(file)
 
     if not isinstance(raw_search_results, dict):
-        raise ValueError("raw_search_results.json must contain an object by seed label.")
+        raise ValueError("raw_search_results.json needs to contain an object by seed label.")
 
     return raw_search_results
 
 
-def merge_hard_negative_candidates(
-    people: pd.DataFrame,
-    seeds: pd.DataFrame,
-    raw_search_results: dict,
-) -> tuple:
-    """Merge alternative search matches into people table
-    
-    Args -
-        people(pd.DataFrame): people records
-        seeds(pd.DataFrame):  Evaluation roots that must not become hard negatives
-        raw_search_results(dict): WikiTree search responses
-
-    Returns -
-        Tuple containing the expanded people DataFrame and the hard negative
-        audit manifest.
-    """
+def merge_hard_negative_candidates(people, seeds, raw_search_results):
 
     required_people_columns = {"wikitree_id", "person_id"}
     required_seed_columns = {"seed_label", "wikitree_id"}
