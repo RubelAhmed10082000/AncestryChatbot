@@ -1,17 +1,3 @@
-"""
-Generate ancestor trees from schema.
-
-loads Person, Name and Event tables, builds people
-index, extracts recorded parent-child relationships, and traverses
-relationships from root profile.
-
-traversal uses breadth-first search so generation depth can be
-limited. The resulting nodes and edges can be returned through the
-API or exported as CSV, JSON and a standalone HTML visualisation.
-
-It does not infer or create unsupported family relationships.
-"""
-
 import argparse
 import json
 from collections import defaultdict, deque
@@ -34,19 +20,13 @@ BAD_VALUES = {"", "nan", "NaN", "None", "none", "NULL", "null"}
 
 
 def read_required_csv(path):
-    """
-    Reads csv file path
-    """
     if not path.exists():
         raise FileNotFoundError(f"Missing required file: {path}")
 
     return pd.read_csv(path, dtype=str, keep_default_na=False)
 
 
-def safe_int(value: any) -> float | None:
-    """
-    Converts numeric values to integer otherwise returns None
-    """
+def safe_int(value):
     text = clean_text(value)
     if text is None:
         return None
@@ -54,14 +34,7 @@ def safe_int(value: any) -> float | None:
    
 
 
-def build_full_name(row: pd.Series) -> str:
-    """
-    Builds full name for display using full name, middle name and birth surname
-
-    Prefers birth surname over current surname
-
-    If names unavalable then fallback on WikiTreeID, PersonID then generic label
-    """
+def build_full_name(row):
     parts = []
 
     # Extracting  first_name and middle_name
@@ -82,18 +55,7 @@ def build_full_name(row: pd.Series) -> str:
     return clean_text(row.get("Wikitree_ID")) or clean_text(row.get("Person_ID")) or "Unknown person"
 
 
-def load_schema(schema_dir: str) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """Load Person, Name and Event tables.
-
-    Optional columns are added with missing values when absent so 
-    tree generation logic can operate against a consistent schema.
-
-    Args -
-        schema_dir(str): Directory containing the transformed schema CSV files
-
-    Returns -
-        tuple containing the Person, Name and Event DataFrames.
-    """
+def load_schema(schema_dir):
 
     schema_dir = Path(schema_dir)
 
@@ -139,22 +101,8 @@ def load_schema(schema_dir: str) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFra
     return person, names, event
 
 
-def build_people_index(
-    person: pd.DataFrame,
-    names: pd.DataFrame,
-    event: pd.DataFrame,
-) -> pd.DataFrame:
+def build_people_index(person, names, event):
     
-    """
-    Builds row, one row per person, with person, name and event attributes
-    
-    Args - 
-        person(pd): dataframe with person attribute
-        names(pd): dataframe with name attribute for each person
-        event(pd): dataframe with event attribute which is experienced by one or more person(s)
-    Return - 
-        pd: dataframe with names, events and persons merged
-    """
     # Merging name and person table
     people = person.merge(names, on="Person_ID", how="left", suffixes=("", "_name"))
 
@@ -196,21 +144,7 @@ def build_people_index(
     return people
 
 
-def resolve_root_person_id(person: pd, person_id: str | None,
-                           wikitree_id: str | None) -> str:
-    """
-    resolves entity match using either wikitree_id or person_id
-
-    PersonID takes priority, otherwise WikiTreeID is used as a fallback
-
-    Args -
-        person(pd): pandas dataframe containing person attribute
-        person_id(str | None): synthetic ID identifying person within person dataframe 
-        wikitree_id(str | None): ID given by wikitree
-
-    Returns - 
-        str: ID of person entity
-    """
+def resolve_root_person_id(person, person_id,  wikitree_id):
 
     # Matching on person_id
     if person_id:
@@ -229,15 +163,7 @@ def resolve_root_person_id(person: pd, person_id: str | None,
     raise ValueError("Provide either --person-id or --wikitree-id.")
 
 
-def build_parent_edges(event: pd.DataFrame) -> pd.DataFrame:
-    """Extract parent child edges from the relationship event table
-
-    Only father_of, mother_of, child_of relationship retained
-    Args - 
-        event(pd.DataFrame): pandas dataframe containing event data involving one or more person entity
-    Returns -   
-       dataframe that will contain edges(relations) between person entites
-    """
+def build_parent_edges(event):
 
     # retaining only event types elating to parent child relationships and renaming them 
     edges = event[event["Event_Type"].isin(PARENT_EVENT_TYPES)].copy()
@@ -269,28 +195,10 @@ def build_parent_edges(event: pd.DataFrame) -> pd.DataFrame:
     return edges
 
 
-def collect_ancestor_subgraph(root_person_id: str, people: pd.DataFrame, parent_edges:pd.DataFrame, 
-                              max_generations: int, 
-                              include_missing_stubs: bool) -> tuple[pd.DataFrame,pd.DataFrame]:
-    """
-    "Collect the ancestors for a root person.
-
-    Breadth first search from child to parent. Rroot is
-    generation 0, its parents are generation 1, and traversal continues until
-    `max_generations` is reached.
-
-    A visited map prevents repeated visits while still.
-    Missing linked profiles can optionally be represented as stub nodes.
-
-    Args - 
-        root_person_id(str): ID of person that traversal will start from
-        person(pd.DataFrame): dataframe containing attribute of people, will be used in traversal
-        parent_edges(pd.DataFrame): dataframe recording relations between child and parent 
-        max_generations(int): maximum depth of traversal
-
-    Returns - 
-        tuple[df, df]: a tuple that contains both nodes and edges between nodes
-    """
+def collect_ancestor_subgraph(root_person_id, people, parent_edges, 
+                              max_generations, 
+                              include_missing_stubs):
+    
     # Setting person_id
     people_ids = set(people["Person_ID"].astype(str))
     parent_lookup = defaultdict(list)
@@ -406,18 +314,7 @@ def collect_ancestor_subgraph(root_person_id: str, people: pd.DataFrame, parent_
     return nodes.reset_index(drop=True), edges.reset_index(drop=True)
 
 
-def summarise_tree(nodes: pd.DataFrame, edges: pd.DataFrame) -> pd:
-    """Summarises data collected from tree traversal
-
-    Includes node and edge count, maximum generation, stub count and relationship type counts
-
-    Args - 
-        nodes(pd.DataFrame): Generated tree nodes
-        edges(pd.DataFrame): Generated tree edges
-    
-    Returns - 
-        Dataframe describing the tree
-    """
+def summarise_tree(nodes, edges):
     rows = [
         {"metric": "node_count", "value": len(nodes)},
         {"metric": "edge_count", "value": len(edges)},
@@ -435,11 +332,7 @@ def summarise_tree(nodes: pd.DataFrame, edges: pd.DataFrame) -> pd:
     return pd.DataFrame(rows)
 
 
-def tree_to_json(
-    nodes: pd.DataFrame,
-    edges: pd.DataFrame,
-) -> dict[str, list[dict]]:    
-    """Convert tree node and edge into a JSON dictionary."""
+def tree_to_json(nodes, edges):    
 
     return {
         "nodes": nodes.to_dict(orient="records"),
@@ -447,7 +340,7 @@ def tree_to_json(
     }
 
 def build_output_dir(base_output_dir, root_wikitree_id, root_person_id):
-    """Build directory for a generated tree."""
+
     folder_name = root_wikitree_id or root_person_id
     safe_name = "".join(ch if ch.isalnum() or ch in {"-", "_"} else "_" for ch in folder_name)
     return Path(base_output_dir) / safe_name
@@ -503,14 +396,14 @@ def main():
     json_path.write_text(json.dumps(tree_to_json(nodes, edges), indent=2, ensure_ascii=False), encoding="utf-8")
 
     print("Family tree generated.")
-    print(f"Root:          {root_label} ({root_wikitree_id or root_person_id})")
-    print(f"Generations:   {args.generations}")
-    print(f"Nodes:         {len(nodes)}")
-    print(f"Edges:         {len(edges)}")
+    print(f"Root: {root_label} ({root_wikitree_id or root_person_id})")
+    print(f"Generations: {args.generations}")
+    print(f"Nodes: {len(nodes)}")
+    print(f"Edges: {len(edges)}")
     print(f"Output folder: {output_dir}")
-    print(f"Nodes CSV:     {nodes_path}")
-    print(f"Edges CSV:     {edges_path}")
-    print(f"JSON:          {json_path}")
+    print(f"Nodes CSV: {nodes_path}")
+    print(f"Edges CSV: {edges_path}")
+    print(f"JSON: {json_path}")
 
 
 if __name__ == "__main__":
